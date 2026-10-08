@@ -5,8 +5,8 @@
 		"annotations": [],
 		"type": "AzureSqlDatabase",
 		"typeProperties": {
-			"server": "mission100bharat081097sqlserver.database.windows.net",
-			"database": "Mission100Bharat081097DB",
+			"server": "sql-olist-dev-bd.database.windows.net",
+			"database": "sqldb-olist-control",
 			"encrypt": "mandatory",
 			"trustServerCertificate": false,
 			"authenticationType": "SystemAssignedManagedIdentity"

@@ -3,15 +3,11 @@
 # repository: they are pipeline variables, set in Azure DevOps (see azure-pipelines.yml, top).
 
 variables:
-  # The Azure DevOps service connection the pipeline signs in to Azure with (no password: a
-  # managed identity trusted through a federated credential).
-  serviceConnection: sc-olist-azure
-
-  # The dev Data Factory. It is the only factory connected to Git; the build reads its files from
-  # the folder adf/ and needs its resource id only as a label for the template it generates.
-  devResourceGroup: Azurelib-Academy
-  devFactoryName: mission100bharat081097
-  devFactoryId: /subscriptions/$(subscriptionId)/resourceGroups/$(devResourceGroup)/providers/Microsoft.DataFactory/factories/$(devFactoryName)
+  # The Azure DevOps service connections the pipeline signs in to Azure with - one per
+  # environment, so that nothing that can deploy to dev can deploy to prod. Each is a managed
+  # identity trusted through a federated credential: there is no password.
+  devServiceConnection: sc-olist-dev
+  prodServiceConnection: sc-olist-prod
 
   # The Azure Databricks workspace (one workspace; dev and prod are separated by catalog,
   # service principal and storage account).
@@ -19,7 +15,8 @@ variables:
 
   # The names of the ARM template parameters that carry the values which differ between dev and
   # prod. The build fails if one of them is not in the generated template (cicd/scripts/
-  # check-arm-parameters.ps1), because prod would then silently keep dev's value.
+  # check-arm-parameters.ps1), because an environment would then silently keep the value that is
+  # written in the repository's files (dev's).
   armParamStorageUrl: ls_adls_lake_properties_typeProperties_url
   armParamKeyVaultUrl: ls_kv_properties_typeProperties_baseUrl
   armParamSqlServer: ls_azuresql_control_properties_typeProperties_server

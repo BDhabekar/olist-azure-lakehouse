@@ -3,7 +3,7 @@
 
   It must be started inside an AzureCLI task: it asks the Azure CLI, which that task has signed in
   as the pipeline's deployment identity, for a short-lived token for Azure SQL. No password exists.
-  The identity must already be a user of the database (sql/control-db/deploy/prod_bootstrap_users.sql,
+  The identity must already be a user of the database (sql/control-db/deploy/dev_bootstrap_users.sql or prod_bootstrap_users.sql,
   run once by the server's Microsoft Entra admin).
 #>
 param(

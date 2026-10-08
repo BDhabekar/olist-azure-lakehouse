@@ -1,0 +1,146 @@
+# =====================================================================================
+# One environment's deployment - used twice by azure-pipelines.yml, for dev and for prod.
+# -------------------------------------------------------------------------------------
+# The steps are identical for both; only the values differ. They are picked by the
+# environment's name: with env = prod, "$(${{ parameters.env }}StorageAccount)" becomes
+# "$(prodStorageAccount)", a variable of cicd/variables/prod.yml.
+#
+#   1. Databricks: deploys the bundle to the environment's target and reads the id the job
+#      has there.
+#   2. Control database: creates or updates schema etl (tables, procedures, the list of
+#      tables). Watermarks are never touched.
+#   3. Data Factory: stops the environment's triggers, applies the ARM template with the
+#      environment's values (storage, key vault, control database, job id), starts the
+#      triggers that are meant to run.
+#
+# Nothing here starts a cluster or runs a job.
+# =====================================================================================
+
+parameters:
+  - name: env                 # dev or prod: the bundle's target and the prefix of the variables
+    type: string
+    values:
+      - dev
+      - prod
+  - name: dependsOn           # the stage that must have succeeded before this one
+    type: string
+  - name: serviceConnection   # the Azure DevOps service connection of this environment
+    type: string
+
+stages:
+  - stage: deploy_${{ parameters.env }}
+    displayName: Deploy to ${{ parameters.env }}
+    dependsOn: ${{ parameters.dependsOn }}
+    # Only for a commit on main - never for a pull request.
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'), ne(variables['Build.Reason'], 'PullRequest'))
+    jobs:
+      - deployment: deploy
+        displayName: Deploy to ${{ parameters.env }}
+        # olist-dev has no check; olist-prod has an approval: a person must approve the run.
+        environment: olist-${{ parameters.env }}
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - checkout: self
+                # The artifact adf-arm is downloaded automatically to $(Pipeline.Workspace)/adf-arm.
+
+                - script: curl -fsSL https://raw.githubusercontent.com/databricks/setup-cli/main/install.sh | sh
+                  displayName: Install the Databricks CLI
+                  condition: and(succeeded(), eq(variables['Agent.OS'], 'Linux'))
+
+                # ---- 1. Databricks: the job, its cluster definition and its notebooks ----------
+                - task: AzureCLI@2
+                  displayName: Databricks - deploy the bundle and read the job's id
+                  inputs:
+                    azureSubscription: ${{ parameters.serviceConnection }}
+                    useGlobalConfig: true
+                    scriptType: pscore
+                    scriptLocation: inlineScript
+                    workingDirectory: $(Build.Repository.LocalPath)/databricks
+                    inlineScript: |
+                      $env:DATABRICKS_HOST = '$(databricksHost)'
+                      $vars = @('--var=storage_account=$(${{ parameters.env }}StorageAccount)', '--var=run_as_sp=$(${{ parameters.env }}RunAsSpAppId)')
+
+                      databricks bundle deploy -t ${{ parameters.env }} @vars
+                      if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+                      # The job has one id in dev and another in prod. The Data Factory pipeline
+                      # reads it from a global parameter, which the ARM deployment below sets.
+                      $summary = databricks bundle summary -t ${{ parameters.env }} @vars --output json | ConvertFrom-Json
+                      $jobId = $summary.resources.jobs.job_olist_lakehouse.id
+                      if ([string]::IsNullOrWhiteSpace($jobId)) {
+                          Write-Host "##vso[task.logissue type=error]The bundle summary holds no id for the job job_olist_lakehouse."
+                          exit 1
+                      }
+                      Write-Host "The job's id in ${{ parameters.env }}: $jobId"
+                      Write-Host "##vso[task.setvariable variable=envJobId]$jobId"
+
+                # ---- 2. Control database: schema etl ---------------------------------------------
+                - task: AzureCLI@2
+                  displayName: Control database - create or update schema etl
+                  inputs:
+                    azureSubscription: ${{ parameters.serviceConnection }}
+                    scriptType: pscore
+                    scriptLocation: scriptPath
+                    scriptPath: $(Build.Repository.LocalPath)/cicd/scripts/deploy-control-db.ps1
+                    arguments: >-
+                      -Server "$(${{ parameters.env }}SqlServer).database.windows.net"
+                      -Database "$(${{ parameters.env }}SqlDatabase)"
+                      -FactoryUser "$(${{ parameters.env }}FactoryName)"
+                      -ScriptPath "$(Build.Repository.LocalPath)/sql/control-db/deploy/ctl_deploy.sql"
+
+                # ---- 3. Data Factory ----------------------------------------------------------------
+                # Microsoft's script, generated with the template: before the deployment it stops the
+                # triggers; after it, it deletes what is no longer in the template and starts the
+                # triggers whose definition says "Started".
+                - task: AzurePowerShell@5
+                  displayName: Data Factory - stop the triggers
+                  inputs:
+                    azureSubscription: ${{ parameters.serviceConnection }}
+                    ScriptType: InlineScript
+                    Inline: |
+                      $dir = "$(Pipeline.Workspace)/adf-arm"
+                      $script = Join-Path $dir 'PrePostDeploymentScript.Ver2.ps1'
+                      if (-not (Test-Path $script)) { $script = Join-Path $dir 'PrePostDeploymentScript.ps1' }
+                      Write-Host "Using $script"
+                      & $script -armTemplate "$dir/ARMTemplateForFactory.json" -ResourceGroupName '$(${{ parameters.env }}ResourceGroup)' -DataFactoryName '$(${{ parameters.env }}FactoryName)' -predeployment $true -deleteDeployment $false
+                    azurePowerShellVersion: LatestVersion
+                    pwsh: true
+
+                - task: AzureResourceManagerTemplateDeployment@3
+                  displayName: Data Factory - apply the ARM template with the environment's values
+                  inputs:
+                    deploymentScope: Resource Group
+                    azureResourceManagerConnection: ${{ parameters.serviceConnection }}
+                    subscriptionId: $(subscriptionId)
+                    action: Create Or Update Resource Group
+                    resourceGroupName: $(${{ parameters.env }}ResourceGroup)
+                    location: $(${{ parameters.env }}Location)
+                    templateLocation: Linked artifact
+                    csmFile: $(Pipeline.Workspace)/adf-arm/ARMTemplateForFactory.json
+                    csmParametersFile: $(Pipeline.Workspace)/adf-arm/ARMTemplateParametersForFactory.json
+                    # Everything not overridden here is identical in dev and prod: the pipelines, the
+                    # datasets, the source connection, the shared integration runtime.
+                    overrideParameters: >-
+                      -factoryName "$(${{ parameters.env }}FactoryName)"
+                      -$(armParamStorageUrl) "https://$(${{ parameters.env }}StorageAccount).dfs.core.windows.net/"
+                      -$(armParamKeyVaultUrl) "https://$(${{ parameters.env }}KeyVault).vault.azure.net/"
+                      -$(armParamSqlServer) "$(${{ parameters.env }}SqlServer).database.windows.net"
+                      -$(armParamSqlDatabase) "$(${{ parameters.env }}SqlDatabase)"
+                      -$(armParamJobId) "$(envJobId)"
+                    deploymentMode: Incremental
+
+                - task: AzurePowerShell@5
+                  displayName: Data Factory - clean up and start the triggers meant to run
+                  inputs:
+                    azureSubscription: ${{ parameters.serviceConnection }}
+                    ScriptType: InlineScript
+                    Inline: |
+                      $dir = "$(Pipeline.Workspace)/adf-arm"
+                      $script = Join-Path $dir 'PrePostDeploymentScript.Ver2.ps1'
+                      if (-not (Test-Path $script)) { $script = Join-Path $dir 'PrePostDeploymentScript.ps1' }
+                      Write-Host "Using $script"
+                      & $script -armTemplate "$dir/ARMTemplateForFactory.json" -ResourceGroupName '$(${{ parameters.env }}ResourceGroup)' -DataFactoryName '$(${{ parameters.env }}FactoryName)' -predeployment $false -deleteDeployment $true
+                    azurePowerShellVersion: LatestVersion
+                    pwsh: true

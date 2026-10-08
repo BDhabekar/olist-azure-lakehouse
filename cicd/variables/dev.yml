@@ -1,0 +1,17 @@
+# The dev environment: the names of its resources. Nothing here is a secret.
+# The dev Data Factory is the only factory connected to Git: it is where pipelines are edited.
+# What RUNS in it is still only what the deployment pipeline has deployed - the same package
+# that goes to prod afterwards.
+
+variables:
+  devResourceGroup: rg-olist-dev
+  devLocation: centralindia
+  devFactoryName: adf-olist-dev-bd
+  devStorageAccount: stolistdevbd
+  devKeyVault: kv-olist-dev-bd
+  devSqlServer: sql-olist-dev-bd
+  devSqlDatabase: sqldb-olist-control
+
+  # The build reads the factory's files from the folder adf/ and needs the dev factory's
+  # resource id as the label of the template it generates.
+  devFactoryId: /subscriptions/$(subscriptionId)/resourceGroups/$(devResourceGroup)/providers/Microsoft.DataFactory/factories/$(devFactoryName)

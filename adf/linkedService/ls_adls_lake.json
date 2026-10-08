@@ -5,7 +5,7 @@
 		"annotations": [],
 		"type": "AzureBlobFS",
 		"typeProperties": {
-			"url": "https://bharat081097adls.dfs.core.windows.net/"
+			"url": "https://stolistdevbd.dfs.core.windows.net/"
 		}
 	}
 }

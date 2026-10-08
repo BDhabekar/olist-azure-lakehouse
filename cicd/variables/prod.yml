@@ -1,6 +1,6 @@
 # The prod environment: the names of its resources. Nothing here is a secret.
-# These are the only values that differ from dev; everything else in the repository is the same
-# for both environments.
+# Together with cicd/variables/dev.yml these are the only values that differ between the two
+# environments; everything else in the repository is the same for both.
 
 variables:
   prodResourceGroup: rg-olist-prod

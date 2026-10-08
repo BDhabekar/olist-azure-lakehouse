@@ -37,12 +37,25 @@ variables:
     description: The name the job has in the workspace.
 
 targets:
-  prod:
-    mode: production
+  # The two targets have the same shape. A target is an environment: its catalog and the name
+  # the job has there. The storage account and the service principal come from the pipeline.
+  dev:
+    mode: production   # "production" = deployed by a pipeline to one fixed place, not a personal copy
     # The job runs as a service principal made for the load - never as the identity that deploys.
     run_as:
       service_principal_name: ${var.run_as_sp}
     # ...and that service principal may read and run what the bundle deploys (the notebooks).
+    permissions:
+      - service_principal_name: ${var.run_as_sp}
+        level: CAN_RUN
+    variables:
+      catalog: olist_dev
+      job_name: job_olist_lakehouse_dev
+
+  prod:
+    mode: production
+    run_as:
+      service_principal_name: ${var.run_as_sp}
     permissions:
       - service_principal_name: ${var.run_as_sp}
         level: CAN_RUN
