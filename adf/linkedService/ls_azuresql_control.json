@@ -1,0 +1,15 @@
+{
+	"name": "ls_azuresql_control",
+	"type": "Microsoft.DataFactory/factories/linkedservices",
+	"properties": {
+		"annotations": [],
+		"type": "AzureSqlDatabase",
+		"typeProperties": {
+			"server": "mission100bharat081097sqlserver.database.windows.net",
+			"database": "Mission100Bharat081097DB",
+			"encrypt": "mandatory",
+			"trustServerCertificate": false,
+			"authenticationType": "SystemAssignedManagedIdentity"
+		}
+	}
+}

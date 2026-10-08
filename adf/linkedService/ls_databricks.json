@@ -1,0 +1,13 @@
+{
+	"name": "ls_databricks",
+	"type": "Microsoft.DataFactory/factories/linkedservices",
+	"properties": {
+		"annotations": [],
+		"type": "AzureDatabricks",
+		"typeProperties": {
+			"domain": "https://adb-7405615162316092.12.azuredatabricks.net",
+			"authentication": "MSI",
+			"workspaceResourceId": "/subscriptions/0ae37ffc-3a59-4cad-9586-468f66ebe0be/resourceGroups/Azurelib-Academy/providers/Microsoft.Databricks/workspaces/mission100bharat081097Databricks"
+		}
+	}
+}

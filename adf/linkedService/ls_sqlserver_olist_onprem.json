@@ -1,0 +1,28 @@
+{
+	"name": "ls_sqlserver_olist_onprem",
+	"type": "Microsoft.DataFactory/factories/linkedservices",
+	"properties": {
+		"annotations": [],
+		"type": "SqlServer",
+		"typeProperties": {
+			"server": "localhost",
+			"database": "OlistOLTP",
+			"encrypt": "mandatory",
+			"trustServerCertificate": false,
+			"authenticationType": "SQL",
+			"userName": "adf_reader",
+			"password": {
+				"type": "AzureKeyVaultSecret",
+				"store": {
+					"referenceName": "ls_kv",
+					"type": "LinkedServiceReference"
+				},
+				"secretName": "sql-olist-adf-reader-password"
+			}
+		},
+		"connectVia": {
+			"referenceName": "shir-olist-shared",
+			"type": "IntegrationRuntimeReference"
+		}
+	}
+}

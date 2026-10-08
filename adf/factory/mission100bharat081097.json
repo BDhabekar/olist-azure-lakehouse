@@ -1,0 +1,21 @@
+{
+	"name": "mission100bharat081097",
+	"properties": {
+		"globalParameters": {
+			"gp_databricks_job_id": {
+				"type": "string",
+				"value": "303506690915933"
+			}
+		},
+		"trustModeClaimForMi": {
+			"value": "Disabled",
+			"editable": true
+		}
+	},
+	"location": "centralindia",
+	"identity": {
+		"type": "SystemAssigned",
+		"principalId": "99f4f202-55ce-404e-8155-58c2e486aea8",
+		"tenantId": "f4e9b85c-cb10-47cc-be87-ae0ca9f9388c"
+	}
+}

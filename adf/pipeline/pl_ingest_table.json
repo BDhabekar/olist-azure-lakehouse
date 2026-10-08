@@ -1,0 +1,354 @@
+{
+	"name": "pl_ingest_table",
+	"properties": {
+		"activities": [
+			{
+				"name": "lkp_new_watermark",
+				"type": "Lookup",
+				"dependsOn": [],
+				"policy": {
+					"timeout": "0.12:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "SqlServerSource",
+						"sqlReaderQuery": {
+							"value": "@if(equals(pipeline().parameters.p_load_type, 'incremental'),\n    concat('SELECT MAX(', pipeline().parameters.p_watermark_column, ') AS new_watermark FROM ', pipeline().parameters.p_source_schema, '.', pipeline().parameters.p_table_name),\n    'SELECT CAST(SYSUTCDATETIME() AS DATETIME2(3)) AS new_watermark')",
+							"type": "Expression"
+						},
+						"queryTimeout": "02:00:00",
+						"partitionOption": "None"
+					},
+					"dataset": {
+						"referenceName": "ds_onprem_sql",
+						"type": "DatasetReference"
+					}
+				}
+			},
+			{
+				"name": "cp_src_to_bronze",
+				"type": "Copy",
+				"dependsOn": [
+					{
+						"activity": "lkp_new_watermark",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "0.12:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "SqlServerSource",
+						"sqlReaderQuery": {
+							"value": "@if(equals(pipeline().parameters.p_load_type, 'incremental'),\n    concat('SELECT * FROM ', pipeline().parameters.p_source_schema, '.', pipeline().parameters.p_table_name,\n           ' WHERE ', pipeline().parameters.p_watermark_column, ' > ''', pipeline().parameters.p_last_watermark, ''' AND ', pipeline().parameters.p_watermark_column, ' <= ''', activity('lkp_new_watermark').output.firstRow.new_watermark, ''''),\n    concat('SELECT * FROM ', pipeline().parameters.p_source_schema, '.', pipeline().parameters.p_table_name))",
+							"type": "Expression"
+						},
+						"queryTimeout": "02:00:00",
+						"partitionOption": "None"
+					},
+					"sink": {
+						"type": "ParquetSink",
+						"storeSettings": {
+							"type": "AzureBlobFSWriteSettings"
+						},
+						"formatSettings": {
+							"type": "ParquetWriteSettings"
+						}
+					},
+					"enableStaging": false,
+					"translator": {
+						"type": "TabularTranslator",
+						"typeConversion": true,
+						"typeConversionSettings": {
+							"allowDataTruncation": true,
+							"treatBooleanAsNumber": false
+						}
+					}
+				},
+				"inputs": [
+					{
+						"referenceName": "ds_onprem_sql",
+						"type": "DatasetReference"
+					}
+				],
+				"outputs": [
+					{
+						"referenceName": "ds_bronze_parquet",
+						"type": "DatasetReference",
+						"parameters": {
+							"p_table": {
+								"value": "@pipeline().parameters.p_table_name",
+								"type": "Expression"
+							},
+							"p_load_date": {
+								"value": "@pipeline().parameters.p_load_date",
+								"type": "Expression"
+							},
+							"p_file_name": {
+								"value": "@concat(pipeline().parameters.p_run_id, '.parquet')",
+								"type": "Expression"
+							}
+						}
+					}
+				]
+			},
+			{
+				"name": "sp_update_watermark",
+				"type": "SqlServerStoredProcedure",
+				"dependsOn": [
+					{
+						"activity": "cp_src_to_bronze",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "0.12:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"storedProcedureName": "[etl].[usp_update_watermark]",
+					"storedProcedureParameters": {
+						"new_watermark": {
+							"value": {
+								"value": "@activity('lkp_new_watermark').output.firstRow.new_watermark",
+								"type": "Expression"
+							},
+							"type": "String"
+						},
+						"table_name": {
+							"value": {
+								"value": "@pipeline().parameters.p_table_name",
+								"type": "Expression"
+							},
+							"type": "String"
+						}
+					}
+				},
+				"linkedServiceName": {
+					"referenceName": "ls_azuresql_control",
+					"type": "LinkedServiceReference"
+				}
+			},
+			{
+				"name": "sp_log_success",
+				"type": "SqlServerStoredProcedure",
+				"dependsOn": [
+					{
+						"activity": "sp_update_watermark",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "0.12:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"storedProcedureName": "[etl].[usp_log_run]",
+					"storedProcedureParameters": {
+						"error_message": {
+							"value": null,
+							"type": "String"
+						},
+						"load_type": {
+							"value": {
+								"value": "@pipeline().parameters.p_load_type",
+								"type": "Expression"
+							},
+							"type": "String"
+						},
+						"rows_copied": {
+							"value": {
+								"value": "@activity('cp_src_to_bronze').output.rowsCopied",
+								"type": "Expression"
+							},
+							"type": "Int64"
+						},
+						"run_id": {
+							"value": {
+								"value": "@pipeline().parameters.p_run_id",
+								"type": "Expression"
+							},
+							"type": "String"
+						},
+						"status": {
+							"value": "succeeded",
+							"type": "String"
+						},
+						"table_name": {
+							"value": {
+								"value": "@pipeline().parameters.p_table_name",
+								"type": "Expression"
+							},
+							"type": "String"
+						},
+						"watermark_from": {
+							"value": {
+								"value": "@pipeline().parameters.p_last_watermark",
+								"type": "Expression"
+							},
+							"type": "String"
+						},
+						"watermark_to": {
+							"value": {
+								"value": "@activity('lkp_new_watermark').output.firstRow.new_watermark",
+								"type": "Expression"
+							},
+							"type": "String"
+						}
+					}
+				},
+				"linkedServiceName": {
+					"referenceName": "ls_azuresql_control",
+					"type": "LinkedServiceReference"
+				}
+			},
+			{
+				"name": "sp_log_failure",
+				"type": "SqlServerStoredProcedure",
+				"dependsOn": [
+					{
+						"activity": "cp_src_to_bronze",
+						"dependencyConditions": [
+							"Failed"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "0.12:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"storedProcedureName": "[etl].[usp_log_run]",
+					"storedProcedureParameters": {
+						"error_message": {
+							"value": {
+								"value": "@activity('cp_src_to_bronze').error.message",
+								"type": "Expression"
+							},
+							"type": "String"
+						},
+						"load_type": {
+							"value": {
+								"value": "@pipeline().parameters.p_load_type",
+								"type": "Expression"
+							},
+							"type": "String"
+						},
+						"rows_copied": {
+							"value": null,
+							"type": "Int64"
+						},
+						"run_id": {
+							"value": {
+								"value": "@pipeline().parameters.p_run_id",
+								"type": "Expression"
+							},
+							"type": "String"
+						},
+						"status": {
+							"value": "failed",
+							"type": "String"
+						},
+						"table_name": {
+							"value": {
+								"value": "@pipeline().parameters.p_table_name",
+								"type": "Expression"
+							},
+							"type": "String"
+						},
+						"watermark_from": {
+							"value": {
+								"value": "@pipeline().parameters.p_last_watermark",
+								"type": "Expression"
+							},
+							"type": "String"
+						},
+						"watermark_to": {
+							"value": null,
+							"type": "String"
+						}
+					}
+				},
+				"linkedServiceName": {
+					"referenceName": "ls_azuresql_control",
+					"type": "LinkedServiceReference"
+				}
+			},
+			{
+				"name": "fail_after_logging",
+				"type": "Fail",
+				"dependsOn": [
+					{
+						"activity": "sp_log_failure",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"message": {
+						"value": "@concat('Ingest failed for ', pipeline().parameters.p_table_name)",
+						"type": "Expression"
+					},
+					"errorCode": "INGEST_FAILED"
+				}
+			}
+		],
+		"parameters": {
+			"p_run_id": {
+				"type": "string"
+			},
+			"p_load_date": {
+				"type": "string"
+			},
+			"p_source_schema": {
+				"type": "string"
+			},
+			"p_table_name": {
+				"type": "string"
+			},
+			"p_load_type": {
+				"type": "string"
+			},
+			"p_watermark_column": {
+				"type": "string"
+			},
+			"p_last_watermark": {
+				"type": "string"
+			}
+		},
+		"annotations": [],
+		"lastPublishTime": "2026-10-03T10:23:36Z"
+	},
+	"type": "Microsoft.DataFactory/factories/pipelines"
+}

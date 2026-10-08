@@ -1,0 +1,12 @@
+{
+	"name": "shir-olist-shared",
+	"properties": {
+		"type": "SelfHosted",
+		"typeProperties": {
+			"linkedInfo": {
+				"resourceId": "/subscriptions/0ae37ffc-3a59-4cad-9586-468f66ebe0be/resourcegroups/rg-olist-shared/providers/Microsoft.DataFactory/factories/adf-olist-shared-bd/integrationruntimes/shir-bharats-laptop",
+				"authorizationType": "Rbac"
+			}
+		}
+	}
+}

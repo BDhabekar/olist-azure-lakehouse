@@ -1,0 +1,11 @@
+{
+	"name": "ls_adls_lake",
+	"type": "Microsoft.DataFactory/factories/linkedservices",
+	"properties": {
+		"annotations": [],
+		"type": "AzureBlobFS",
+		"typeProperties": {
+			"url": "https://bharat081097adls.dfs.core.windows.net/"
+		}
+	}
+}

@@ -1,0 +1,60 @@
+{
+	"name": "Copy_Customer_To_JSON",
+	"properties": {
+		"activities": [
+			{
+				"name": "Copy Customer table from SQL DB to ADLS JSON",
+				"type": "Copy",
+				"dependsOn": [],
+				"policy": {
+					"timeout": "0.12:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "AzureSqlSource",
+						"queryTimeout": "02:00:00",
+						"partitionOption": "None"
+					},
+					"sink": {
+						"type": "JsonSink",
+						"storeSettings": {
+							"type": "AzureBlobFSWriteSettings"
+						},
+						"formatSettings": {
+							"type": "JsonWriteSettings"
+						}
+					},
+					"enableStaging": false
+				},
+				"inputs": [
+					{
+						"referenceName": "SQL_DB_Generic_DS",
+						"type": "DatasetReference",
+						"parameters": {
+							"tableName": "Customer",
+							"schemaName": "SalesLT"
+						}
+					}
+				],
+				"outputs": [
+					{
+						"referenceName": "ADLS_JSON_Generic_DS",
+						"type": "DatasetReference",
+						"parameters": {
+							"folderName": "JSON",
+							"fileName": "customerTable.json"
+						}
+					}
+				]
+			}
+		],
+		"annotations": [],
+		"lastPublishTime": "2026-08-30T11:13:00Z"
+	},
+	"type": "Microsoft.DataFactory/factories/pipelines"
+}

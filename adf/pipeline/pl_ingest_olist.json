@@ -1,0 +1,174 @@
+{
+	"name": "pl_ingest_olist",
+	"properties": {
+		"activities": [
+			{
+				"name": "lkp_config",
+				"type": "Lookup",
+				"dependsOn": [
+					{
+						"activity": "set_load_date",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "0.12:00:00",
+					"retry": 2,
+					"retryIntervalInSeconds": 60,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "AzureSqlSource",
+						"sqlReaderQuery": "SELECT table_name, source_schema, load_type, watermark_column, last_watermark, key_columns FROM etl.ingest_config WHERE active=1",
+						"queryTimeout": "02:00:00",
+						"partitionOption": "None"
+					},
+					"dataset": {
+						"referenceName": "ds_control_db",
+						"type": "DatasetReference"
+					},
+					"firstRowOnly": false
+				}
+			},
+			{
+				"name": "set_load_date",
+				"type": "SetVariable",
+				"dependsOn": [],
+				"policy": {
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"variableName": "v_load_date",
+					"value": {
+						"value": "@formatDateTime(utcNow(), 'yyyy-MM-dd')",
+						"type": "Expression"
+					}
+				}
+			},
+			{
+				"name": "fe_tables",
+				"type": "ForEach",
+				"dependsOn": [
+					{
+						"activity": "lkp_config",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"items": {
+						"value": "@activity('lkp_config').output.value",
+						"type": "Expression"
+					},
+					"isSequential": false,
+					"batchCount": 4,
+					"activities": [
+						{
+							"name": "ep_ingest_table",
+							"type": "ExecutePipeline",
+							"dependsOn": [],
+							"policy": {
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"pipeline": {
+									"referenceName": "pl_ingest_table",
+									"type": "PipelineReference"
+								},
+								"waitOnCompletion": true,
+								"parameters": {
+									"p_run_id": {
+										"value": "@pipeline().RunId",
+										"type": "Expression"
+									},
+									"p_load_date": {
+										"value": "@variables('v_load_date')",
+										"type": "Expression"
+									},
+									"p_source_schema": {
+										"value": "@item().source_schema",
+										"type": "Expression"
+									},
+									"p_table_name": {
+										"value": "@item().table_name",
+										"type": "Expression"
+									},
+									"p_load_type": {
+										"value": "@item().load_type",
+										"type": "Expression"
+									},
+									"p_watermark_column": {
+										"value": "@item().watermark_column",
+										"type": "Expression"
+									},
+									"p_last_watermark": {
+										"value": "@item().last_watermark",
+										"type": "Expression"
+									}
+								}
+							}
+						}
+					]
+				}
+			},
+			{
+				"name": "job_bronze_silver",
+				"type": "DatabricksJob",
+				"dependsOn": [
+					{
+						"activity": "fe_tables",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "0.01:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"jobId": {
+						"value": "@pipeline().globalParameters.gp_databricks_job_id",
+						"type": "Expression"
+					},
+					"jobParameters": {
+						"p_run_id": {
+							"value": "@pipeline().RunId",
+							"type": "Expression"
+						},
+						"p_tables": {
+							"value": "@string(activity('lkp_config').output.value)",
+							"type": "Expression"
+						}
+					}
+				},
+				"linkedServiceName": {
+					"referenceName": "ls_databricks",
+					"type": "LinkedServiceReference"
+				}
+			}
+		],
+		"variables": {
+			"v_load_date": {
+				"type": "String"
+			}
+		},
+		"annotations": [],
+		"lastPublishTime": "2026-10-07T20:05:03Z"
+	},
+	"type": "Microsoft.DataFactory/factories/pipelines"
+}
