@@ -1,0 +1,12 @@
+{
+	"name": "adf-olist-dev-bd",
+	"properties": {
+		"globalParameters": {
+			"gp_databricks_job_id": {
+				"type": "string",
+				"value": "0"
+			}
+		}
+	},
+	"location": "centralindia"
+}
