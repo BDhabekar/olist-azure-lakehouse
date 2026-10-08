@@ -47,25 +47,16 @@ pr:
     include:
       - main
 
-parameters:
-  - name: agent
-    displayName: Where the jobs run
-    type: string
-    default: hosted
-    values:
-      - hosted       # a Microsoft-hosted Ubuntu machine
-      - selfhosted   # the agent pool "Default" (an agent installed on a machine of your own)
-
 variables:
   - template: cicd/variables/common.yml
   - template: cicd/variables/dev.yml
   - template: cicd/variables/prod.yml
 
+# Every job runs on a Microsoft-hosted Ubuntu machine: nothing is installed anywhere, and the
+# machine is thrown away after the job. (A team with resources inside a private network would
+# name a self-hosted agent pool here instead.)
 pool:
-  ${{ if eq(parameters.agent, 'hosted') }}:
-    vmImage: ubuntu-latest
-  ${{ else }}:
-    name: Default
+  vmImage: ubuntu-latest
 
 stages:
   # ===================================================================================
