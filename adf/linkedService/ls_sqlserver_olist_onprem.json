@@ -1,6 +1,5 @@
 {
 	"name": "ls_sqlserver_olist_onprem",
-	"type": "Microsoft.DataFactory/factories/linkedservices",
 	"properties": {
 		"annotations": [],
 		"type": "SqlServer",
@@ -8,7 +7,7 @@
 			"server": "localhost",
 			"database": "OlistOLTP",
 			"encrypt": "mandatory",
-			"trustServerCertificate": false,
+			"trustServerCertificate": true,
 			"authenticationType": "SQL",
 			"userName": "adf_reader",
 			"password": {
@@ -24,5 +23,6 @@
 			"referenceName": "shir-olist-shared",
 			"type": "IntegrationRuntimeReference"
 		}
-	}
+	},
+	"type": "Microsoft.DataFactory/factories/linkedservices"
 }
