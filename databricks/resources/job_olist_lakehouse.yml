@@ -1,0 +1,60 @@
+# =====================================================================================
+# The load job: bronze, then silver.
+# -------------------------------------------------------------------------------------
+# Two notebook tasks on one job cluster. The cluster is created for the run and removed when
+# the run ends; the job owns no machine between runs.
+#
+# The job is started by the Data Factory pipeline pl_ingest_olist (activity job_bronze_silver),
+# which hands over two of the four parameters:
+#   p_run_id  - the pipeline's run id, so one id links the copy, the bronze load and the silver load
+#   p_tables  - the rows of the control table etl.ingest_config as JSON: the one list of tables
+# The other two are the environment's own values and come from the bundle's variables:
+#   p_catalog, p_storage_account
+#
+# The cluster block is the job's own definition as Databricks shows it ("Edit as YAML"),
+# unchanged. Which identity the job runs as is set per target in databricks.yml.
+# =====================================================================================
+
+resources:
+  jobs:
+    job_olist_lakehouse:
+      name: ${var.job_name}
+
+      tasks:
+        - task_key: bronze_load
+          notebook_task:
+            notebook_path: ../nb_bronze_load.py
+          job_cluster_key: olist_load_cluster
+
+        # silver starts only when bronze has succeeded
+        - task_key: silver_load
+          depends_on:
+            - task_key: bronze_load
+          notebook_task:
+            notebook_path: ../nb_silver_load.py
+          job_cluster_key: olist_load_cluster
+
+      job_clusters:
+        - job_cluster_key: olist_load_cluster
+          new_cluster:
+            cluster_name: ""
+            spark_version: 18.x-scala2.13
+            node_type_id: Standard_D4s_v3
+            data_security_mode: DATA_SECURITY_MODE_AUTO
+            runtime_engine: STANDARD
+            kind: CLASSIC_PREVIEW
+            is_single_node: true
+
+      # a second start while a run is active waits in a queue instead of failing
+      queue:
+        enabled: true
+
+      parameters:
+        - name: p_catalog
+          default: ${var.catalog}
+        - name: p_storage_account
+          default: ${var.storage_account}
+        - name: p_tables
+          default: ""
+        - name: p_run_id
+          default: ""

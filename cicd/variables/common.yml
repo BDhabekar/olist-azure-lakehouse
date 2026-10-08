@@ -1,0 +1,27 @@
+# Values that are the same for every environment.
+# Nothing here is a secret. Identifiers of the subscription and of identities are NOT kept in the
+# repository: they are pipeline variables, set in Azure DevOps (see azure-pipelines.yml, top).
+
+variables:
+  # The Azure DevOps service connection the pipeline signs in to Azure with (no password: a
+  # managed identity trusted through a federated credential).
+  serviceConnection: sc-olist-azure
+
+  # The dev Data Factory. It is the only factory connected to Git; the build reads its files from
+  # the folder adf/ and needs its resource id only as a label for the template it generates.
+  devResourceGroup: Azurelib-Academy
+  devFactoryName: mission100bharat081097
+  devFactoryId: /subscriptions/$(subscriptionId)/resourceGroups/$(devResourceGroup)/providers/Microsoft.DataFactory/factories/$(devFactoryName)
+
+  # The Azure Databricks workspace (one workspace; dev and prod are separated by catalog,
+  # service principal and storage account).
+  databricksHost: https://adb-7405615162316092.12.azuredatabricks.net
+
+  # The names of the ARM template parameters that carry the values which differ between dev and
+  # prod. The build fails if one of them is not in the generated template (cicd/scripts/
+  # check-arm-parameters.ps1), because prod would then silently keep dev's value.
+  armParamStorageUrl: ls_adls_lake_properties_typeProperties_url
+  armParamKeyVaultUrl: ls_kv_properties_typeProperties_baseUrl
+  armParamSqlServer: ls_azuresql_control_properties_typeProperties_server
+  armParamSqlDatabase: ls_azuresql_control_properties_typeProperties_database
+  armParamJobId: default_properties_gp_databricks_job_id_value

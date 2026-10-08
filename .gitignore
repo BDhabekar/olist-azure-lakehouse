@@ -1,0 +1,13 @@
+# Node packages installed by the build (cicd/adf-build) and the ARM template it generates
+node_modules/
+cicd/adf-build/ArmTemplate/
+
+# Databricks CLI working state of a bundle
+.databricks/
+
+# Python and editor noise
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+.vs/
+.vscode/

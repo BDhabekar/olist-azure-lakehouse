@@ -1,0 +1,12 @@
+# The prod environment: the names of its resources. Nothing here is a secret.
+# These are the only values that differ from dev; everything else in the repository is the same
+# for both environments.
+
+variables:
+  prodResourceGroup: rg-olist-prod
+  prodLocation: centralindia
+  prodFactoryName: adf-olist-prod-bd
+  prodStorageAccount: stolistprodbd
+  prodKeyVault: kv-olist-prod-bd
+  prodSqlServer: sql-olist-prod-bd
+  prodSqlDatabase: sqldb-olist-control

@@ -1,0 +1,51 @@
+# =====================================================================================
+# Olist E-commerce Lakehouse on Azure - the Databricks side as code (Databricks Asset Bundle)
+# -------------------------------------------------------------------------------------
+# A bundle is one description of what must exist in a Databricks workspace: here one job
+# (resources/job_olist_lakehouse.yml) and the notebooks its tasks run. "databricks bundle
+# deploy -t <target>" makes the workspace equal to this description. It starts no cluster and
+# runs nothing.
+#
+# The job is the same in every environment. What differs is listed under "targets" and in the
+# variables the deployment pipeline passes in (azure-pipelines.yml):
+#   catalog          - the Unity Catalog catalog the load writes to
+#   storage_account  - the ADLS Gen2 account that holds the containers bronze, silver, gold
+#   run_as_sp        - Application ID of the service principal the job runs as
+#
+# The workspace address is not written here: the deployment pipeline gives it (DATABRICKS_HOST).
+# =====================================================================================
+
+bundle:
+  name: olist_lakehouse
+
+include:
+  - resources/*.yml
+
+# The build-record notebooks (*.ipynb) are history, not part of the load: they are not uploaded.
+sync:
+  exclude:
+    - "*.ipynb"
+
+variables:
+  catalog:
+    description: The Unity Catalog catalog that holds the schemas bronze, silver and gold.
+  storage_account:
+    description: The ADLS Gen2 storage account that holds the containers bronze, silver and gold.
+  run_as_sp:
+    description: Application ID of the service principal the job runs as (an identifier, not a secret).
+  job_name:
+    description: The name the job has in the workspace.
+
+targets:
+  prod:
+    mode: production
+    # The job runs as a service principal made for the load - never as the identity that deploys.
+    run_as:
+      service_principal_name: ${var.run_as_sp}
+    # ...and that service principal may read and run what the bundle deploys (the notebooks).
+    permissions:
+      - service_principal_name: ${var.run_as_sp}
+        level: CAN_RUN
+    variables:
+      catalog: olist_prod
+      job_name: job_olist_lakehouse_prod

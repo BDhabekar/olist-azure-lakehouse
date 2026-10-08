@@ -1,0 +1,245 @@
+# =====================================================================================
+# Olist E-commerce Lakehouse on Azure - the deployment pipeline (Azure DevOps)
+# -------------------------------------------------------------------------------------
+# WHAT IT DOES
+#   On every pull request into main : stage "build" only  - nothing is deployed.
+#   On every merge into main        : stage "build", then stage "deploy_prod", which waits
+#                                     for a person's approval (environment olist-prod).
+#
+#   build        1. Data Factory: validates every file under adf/ (the same check as
+#                   "Validate all") and generates the factory's ARM template - the package
+#                   that is deployed. Nobody presses Publish.
+#                2. Fails if a value that must differ between dev and prod is not a
+#                   parameter of that template (prod would silently keep dev's value).
+#                3. Databricks: validates the bundle (the job, its cluster, its notebooks).
+#
+#   deploy_prod  1. Databricks: deploys the bundle to its prod target and reads the id the
+#                   job has in prod.
+#                2. Control database: creates or updates schema etl (tables, procedures,
+#                   the list of tables). Watermarks are never touched.
+#                3. Data Factory: stops prod's triggers, applies the ARM template with
+#                   prod's values (storage, key vault, control database, job id), starts
+#                   the triggers that are meant to run.
+#
+#   No step starts a cluster or runs a job. Deploying costs nothing in compute.
+#
+# WHAT DIFFERS BETWEEN DEV AND PROD - and nothing else does
+#   cicd/variables/prod.yml : the names of prod's resources.
+#   Pipeline variables (set in Azure DevOps, not kept in this repository):
+#     subscriptionId    - the Azure subscription
+#     prodRunAsSpAppId  - Application ID of the service principal the prod job runs as
+#
+# HOW IT SIGNS IN
+#   Through the service connection named in cicd/variables/common.yml: a user-assigned
+#   managed identity that trusts this Azure DevOps project (workload identity federation).
+#   There is no password, key or token in this repository or in the pipeline.
+# =====================================================================================
+
+trigger:
+  branches:
+    include:
+      - main
+
+pr:
+  branches:
+    include:
+      - main
+
+parameters:
+  - name: agent
+    displayName: Where the jobs run
+    type: string
+    default: hosted
+    values:
+      - hosted       # a Microsoft-hosted Ubuntu machine
+      - selfhosted   # the agent pool "Default" (an agent installed on a machine of your own)
+
+variables:
+  - template: cicd/variables/common.yml
+  - template: cicd/variables/prod.yml
+
+pool:
+  ${{ if eq(parameters.agent, 'hosted') }}:
+    vmImage: ubuntu-latest
+  ${{ else }}:
+    name: Default
+
+stages:
+  # ===================================================================================
+  - stage: build
+    displayName: Build - validate, and pack the factory
+    jobs:
+      - job: adf
+        displayName: Data Factory - validate and generate the ARM template
+        steps:
+          - task: UseNode@1
+            displayName: Install Node.js 20
+            inputs:
+              version: '20.x'
+
+          - task: Npm@1
+            displayName: Install Microsoft's Data Factory build package
+            inputs:
+              command: install
+              workingDir: $(Build.Repository.LocalPath)/cicd/adf-build
+
+          # "export" validates first, then writes the template to cicd/adf-build/ArmTemplate.
+          # This is what the Publish button does in the Data Factory editor.
+          - task: Npm@1
+            displayName: Validate the factory and generate its ARM template
+            inputs:
+              command: custom
+              workingDir: $(Build.Repository.LocalPath)/cicd/adf-build
+              customCommand: run build export $(Build.Repository.LocalPath)/adf $(devFactoryId) "ArmTemplate"
+
+          - pwsh: |
+              & "$(Build.Repository.LocalPath)/cicd/scripts/check-arm-parameters.ps1" `
+                  -ParametersFile "$(Build.Repository.LocalPath)/cicd/adf-build/ArmTemplate/ARMTemplateParametersForFactory.json" `
+                  -Required '$(armParamStorageUrl)', '$(armParamKeyVaultUrl)', '$(armParamSqlServer)', '$(armParamSqlDatabase)', '$(armParamJobId)'
+            displayName: Check that every dev-or-prod value is a template parameter
+
+          - task: PublishPipelineArtifact@1
+            displayName: Publish the template as the artifact adf-arm
+            inputs:
+              targetPath: $(Build.Repository.LocalPath)/cicd/adf-build/ArmTemplate
+              artifact: adf-arm
+              publishLocation: pipeline
+
+      - job: bundle
+        displayName: Databricks - validate the bundle
+        steps:
+          - script: curl -fsSL https://raw.githubusercontent.com/databricks/setup-cli/main/install.sh | sh
+            displayName: Install the Databricks CLI
+            condition: and(succeeded(), eq(variables['Agent.OS'], 'Linux'))
+
+          # The Databricks CLI signs in through the Azure CLI, which this task has signed in as
+          # the deployment identity.
+          - task: AzureCLI@2
+            displayName: databricks bundle validate (target prod)
+            inputs:
+              azureSubscription: ${{ variables.serviceConnection }}
+              useGlobalConfig: true
+              scriptType: pscore
+              scriptLocation: inlineScript
+              workingDirectory: $(Build.Repository.LocalPath)/databricks
+              inlineScript: |
+                $env:DATABRICKS_HOST = '$(databricksHost)'
+                databricks bundle validate -t prod --var="storage_account=$(prodStorageAccount)" --var="run_as_sp=$(prodRunAsSpAppId)"
+                if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+  # ===================================================================================
+  - stage: deploy_prod
+    displayName: Deploy to prod
+    dependsOn: build
+    # Only for a commit on main - never for a pull request.
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'), ne(variables['Build.Reason'], 'PullRequest'))
+    jobs:
+      - deployment: prod
+        displayName: Deploy to prod
+        environment: olist-prod        # the approval is a check on this environment
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - checkout: self
+                # The artifact adf-arm is downloaded automatically to $(Pipeline.Workspace)/adf-arm.
+
+                - script: curl -fsSL https://raw.githubusercontent.com/databricks/setup-cli/main/install.sh | sh
+                  displayName: Install the Databricks CLI
+                  condition: and(succeeded(), eq(variables['Agent.OS'], 'Linux'))
+
+                # ---- 1. Databricks: the job, its cluster definition and its notebooks ----------
+                - task: AzureCLI@2
+                  displayName: Databricks - deploy the bundle to prod and read the job's id
+                  inputs:
+                    azureSubscription: ${{ variables.serviceConnection }}
+                    useGlobalConfig: true
+                    scriptType: pscore
+                    scriptLocation: inlineScript
+                    workingDirectory: $(Build.Repository.LocalPath)/databricks
+                    inlineScript: |
+                      $env:DATABRICKS_HOST = '$(databricksHost)'
+                      $vars = @('--var=storage_account=$(prodStorageAccount)', '--var=run_as_sp=$(prodRunAsSpAppId)')
+
+                      databricks bundle deploy -t prod @vars
+                      if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+                      # The job has one id in dev and another in prod. The Data Factory pipeline
+                      # reads it from a global parameter, which the ARM deployment below sets.
+                      $summary = databricks bundle summary -t prod @vars --output json | ConvertFrom-Json
+                      $jobId = $summary.resources.jobs.job_olist_lakehouse.id
+                      if ([string]::IsNullOrWhiteSpace($jobId)) {
+                          Write-Host "##vso[task.logissue type=error]The bundle summary holds no id for the job job_olist_lakehouse."
+                          exit 1
+                      }
+                      Write-Host "The job's id in prod: $jobId"
+                      Write-Host "##vso[task.setvariable variable=prodJobId]$jobId"
+
+                # ---- 2. Control database: schema etl ---------------------------------------------
+                - task: AzureCLI@2
+                  displayName: Control database - create or update schema etl
+                  inputs:
+                    azureSubscription: ${{ variables.serviceConnection }}
+                    scriptType: pscore
+                    scriptLocation: scriptPath
+                    scriptPath: $(Build.Repository.LocalPath)/cicd/scripts/deploy-control-db.ps1
+                    arguments: >-
+                      -Server "$(prodSqlServer).database.windows.net"
+                      -Database "$(prodSqlDatabase)"
+                      -FactoryUser "$(prodFactoryName)"
+                      -ScriptPath "$(Build.Repository.LocalPath)/sql/control-db/deploy/ctl_deploy.sql"
+
+                # ---- 3. Data Factory ----------------------------------------------------------------
+                # Microsoft's script, generated with the template: before the deployment it stops the
+                # triggers; after it, it deletes what is no longer in the template and starts the
+                # triggers whose definition says "Started".
+                - task: AzurePowerShell@5
+                  displayName: Data Factory - stop prod's triggers
+                  inputs:
+                    azureSubscription: ${{ variables.serviceConnection }}
+                    ScriptType: InlineScript
+                    Inline: |
+                      $dir = "$(Pipeline.Workspace)/adf-arm"
+                      $script = Join-Path $dir 'PrePostDeploymentScript.Ver2.ps1'
+                      if (-not (Test-Path $script)) { $script = Join-Path $dir 'PrePostDeploymentScript.ps1' }
+                      Write-Host "Using $script"
+                      & $script -armTemplate "$dir/ARMTemplateForFactory.json" -ResourceGroupName '$(prodResourceGroup)' -DataFactoryName '$(prodFactoryName)' -predeployment $true -deleteDeployment $false
+                    azurePowerShellVersion: LatestVersion
+                    pwsh: true
+
+                - task: AzureResourceManagerTemplateDeployment@3
+                  displayName: Data Factory - apply the ARM template with prod's values
+                  inputs:
+                    deploymentScope: Resource Group
+                    azureResourceManagerConnection: ${{ variables.serviceConnection }}
+                    subscriptionId: $(subscriptionId)
+                    action: Create Or Update Resource Group
+                    resourceGroupName: $(prodResourceGroup)
+                    location: $(prodLocation)
+                    templateLocation: Linked artifact
+                    csmFile: $(Pipeline.Workspace)/adf-arm/ARMTemplateForFactory.json
+                    csmParametersFile: $(Pipeline.Workspace)/adf-arm/ARMTemplateParametersForFactory.json
+                    # Everything not overridden here is identical in dev and prod: the pipelines, the
+                    # datasets, the source connection, the shared integration runtime.
+                    overrideParameters: >-
+                      -factoryName "$(prodFactoryName)"
+                      -$(armParamStorageUrl) "https://$(prodStorageAccount).dfs.core.windows.net/"
+                      -$(armParamKeyVaultUrl) "https://$(prodKeyVault).vault.azure.net/"
+                      -$(armParamSqlServer) "$(prodSqlServer).database.windows.net"
+                      -$(armParamSqlDatabase) "$(prodSqlDatabase)"
+                      -$(armParamJobId) "$(prodJobId)"
+                    deploymentMode: Incremental
+
+                - task: AzurePowerShell@5
+                  displayName: Data Factory - clean up and start the triggers meant to run
+                  inputs:
+                    azureSubscription: ${{ variables.serviceConnection }}
+                    ScriptType: InlineScript
+                    Inline: |
+                      $dir = "$(Pipeline.Workspace)/adf-arm"
+                      $script = Join-Path $dir 'PrePostDeploymentScript.Ver2.ps1'
+                      if (-not (Test-Path $script)) { $script = Join-Path $dir 'PrePostDeploymentScript.ps1' }
+                      Write-Host "Using $script"
+                      & $script -armTemplate "$dir/ARMTemplateForFactory.json" -ResourceGroupName '$(prodResourceGroup)' -DataFactoryName '$(prodFactoryName)' -predeployment $false -deleteDeployment $true
+                    azurePowerShellVersion: LatestVersion
+                    pwsh: true
