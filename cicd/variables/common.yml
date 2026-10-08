@@ -9,10 +9,6 @@ variables:
   devServiceConnection: sc-olist-dev
   prodServiceConnection: sc-olist-prod
 
-  # The Azure Databricks workspace (one workspace; dev and prod are separated by catalog,
-  # service principal and storage account).
-  databricksHost: https://adb-7405615162316092.12.azuredatabricks.net
-
   # The names of the ARM template parameters that carry the values which differ between dev and
   # prod. The build fails if one of them is not in the generated template (cicd/scripts/
   # check-arm-parameters.ps1), because an environment would then silently keep the value that is
@@ -22,3 +18,8 @@ variables:
   armParamSqlServer: ls_azuresql_control_properties_typeProperties_server
   armParamSqlDatabase: ls_azuresql_control_properties_typeProperties_database
   armParamJobId: default_properties_gp_databricks_job_id_value
+  # Each environment has its own Azure Databricks workspace. Data Factory does not make these two
+  # properties of the Databricks connection parameters by itself; adf/arm-template-parameters-
+  # definition.json adds them (Microsoft's default list plus "domain" and "workspaceResourceId").
+  armParamDatabricksDomain: ls_databricks_properties_typeProperties_domain
+  armParamDatabricksWorkspaceId: ls_databricks_properties_typeProperties_workspaceResourceId

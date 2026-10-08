@@ -11,6 +11,9 @@ variables:
   devKeyVault: kv-olist-dev-bd
   devSqlServer: sql-olist-dev-bd
   devSqlDatabase: sqldb-olist-control
+  # dev's own Azure Databricks workspace: its name (for its resource id) and its address.
+  devDatabricksWorkspace: dbw-olist-dev
+  devDatabricksHost: https://adb-7405612447641204.4.azuredatabricks.net
 
   # The build reads the factory's files from the folder adf/ and needs the dev factory's
   # resource id as the label of the template it generates.

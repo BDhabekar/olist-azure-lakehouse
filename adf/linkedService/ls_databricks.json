@@ -5,9 +5,9 @@
 		"annotations": [],
 		"type": "AzureDatabricks",
 		"typeProperties": {
-			"domain": "https://adb-7405615162316092.12.azuredatabricks.net",
+			"domain": "https://adb-7405612447641204.4.azuredatabricks.net",
 			"authentication": "MSI",
-			"workspaceResourceId": "/subscriptions/0ae37ffc-3a59-4cad-9586-468f66ebe0be/resourceGroups/Azurelib-Academy/providers/Microsoft.Databricks/workspaces/mission100bharat081097Databricks"
+			"workspaceResourceId": "/subscriptions/0ae37ffc-3a59-4cad-9586-468f66ebe0be/resourceGroups/rg-olist-dev/providers/Microsoft.Databricks/workspaces/dbw-olist-dev"
 		}
 	}
 }

@@ -22,7 +22,8 @@
 #   No step starts a cluster or runs a job. Deploying costs nothing in compute.
 #
 # WHAT DIFFERS BETWEEN DEV AND PROD - and nothing else does
-#   cicd/variables/dev.yml, cicd/variables/prod.yml : the names of each environment's resources.
+#   cicd/variables/dev.yml, cicd/variables/prod.yml : the names of each environment's resources,
+#                                                     its Databricks workspace among them.
 #   Pipeline variables (set in Azure DevOps, not kept in this repository):
 #     subscriptionId    - the Azure subscription
 #     devRunAsSpAppId   - Application ID of the service principal the dev job runs as
@@ -97,7 +98,7 @@ stages:
           - pwsh: |
               & "$(Build.Repository.LocalPath)/cicd/scripts/check-arm-parameters.ps1" `
                   -ParametersFile "$(Build.Repository.LocalPath)/cicd/adf-build/ArmTemplate/ARMTemplateParametersForFactory.json" `
-                  -Required '$(armParamStorageUrl)', '$(armParamKeyVaultUrl)', '$(armParamSqlServer)', '$(armParamSqlDatabase)', '$(armParamJobId)'
+                  -Required '$(armParamStorageUrl)', '$(armParamKeyVaultUrl)', '$(armParamSqlServer)', '$(armParamSqlDatabase)', '$(armParamJobId)', '$(armParamDatabricksDomain)', '$(armParamDatabricksWorkspaceId)'
             displayName: Check that every dev-or-prod value is a template parameter
 
           - task: PublishPipelineArtifact@1
@@ -126,7 +127,7 @@ stages:
               scriptLocation: inlineScript
               workingDirectory: $(Build.Repository.LocalPath)/databricks
               inlineScript: |
-                $env:DATABRICKS_HOST = '$(databricksHost)'
+                $env:DATABRICKS_HOST = '$(devDatabricksHost)'
                 databricks bundle validate -t dev --var="storage_account=$(devStorageAccount)" --var="run_as_sp=$(devRunAsSpAppId)"
                 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 

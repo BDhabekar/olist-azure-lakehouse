@@ -5,13 +5,13 @@
 # environment's name: with env = prod, "$(${{ parameters.env }}StorageAccount)" becomes
 # "$(prodStorageAccount)", a variable of cicd/variables/prod.yml.
 #
-#   1. Databricks: deploys the bundle to the environment's target and reads the id the job
-#      has there.
+#   1. Databricks: deploys the bundle to the environment's own workspace and reads the id the
+#      job has there.
 #   2. Control database: creates or updates schema etl (tables, procedures, the list of
 #      tables). Watermarks are never touched.
 #   3. Data Factory: stops the environment's triggers, applies the ARM template with the
-#      environment's values (storage, key vault, control database, job id), starts the
-#      triggers that are meant to run.
+#      environment's values (storage, key vault, control database, Databricks workspace,
+#      job id), starts the triggers that are meant to run.
 #
 # Nothing here starts a cluster or runs a job.
 # =====================================================================================
@@ -59,7 +59,7 @@ stages:
                     scriptLocation: inlineScript
                     workingDirectory: $(Build.Repository.LocalPath)/databricks
                     inlineScript: |
-                      $env:DATABRICKS_HOST = '$(databricksHost)'
+                      $env:DATABRICKS_HOST = '$(${{ parameters.env }}DatabricksHost)'
                       $vars = @('--var=storage_account=$(${{ parameters.env }}StorageAccount)', '--var=run_as_sp=$(${{ parameters.env }}RunAsSpAppId)')
 
                       databricks bundle deploy -t ${{ parameters.env }} @vars
@@ -129,6 +129,8 @@ stages:
                       -$(armParamSqlServer) "$(${{ parameters.env }}SqlServer).database.windows.net"
                       -$(armParamSqlDatabase) "$(${{ parameters.env }}SqlDatabase)"
                       -$(armParamJobId) "$(envJobId)"
+                      -$(armParamDatabricksDomain) "$(${{ parameters.env }}DatabricksHost)"
+                      -$(armParamDatabricksWorkspaceId) "/subscriptions/$(subscriptionId)/resourceGroups/$(${{ parameters.env }}ResourceGroup)/providers/Microsoft.Databricks/workspaces/$(${{ parameters.env }}DatabricksWorkspace)"
                     deploymentMode: Incremental
 
                 - task: AzurePowerShell@5
