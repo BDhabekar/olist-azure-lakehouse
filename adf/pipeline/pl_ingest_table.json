@@ -232,9 +232,10 @@
 				"type": "SqlServerStoredProcedure",
 				"dependsOn": [
 					{
-						"activity": "cp_src_to_bronze",
+						"activity": "sp_update_watermark",
 						"dependencyConditions": [
-							"Failed"
+							"Failed",
+							"Skipped"
 						]
 					}
 				],
@@ -251,7 +252,7 @@
 					"storedProcedureParameters": {
 						"error_message": {
 							"value": {
-								"value": "@activity('cp_src_to_bronze').error.message",
+								"value": "@coalesce(activity('cp_src_to_bronze').error.message, 'failed - no error message captured')",
 								"type": "Expression"
 							},
 							"type": "String"
