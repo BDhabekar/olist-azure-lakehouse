@@ -232,16 +232,17 @@
 				"type": "SqlServerStoredProcedure",
 				"dependsOn": [
 					{
-						"activity": "cp_src_to_bronze",
+						"activity": "sp_update_watermark",
 						"dependencyConditions": [
-							"Failed"
+							"Failed",
+							"Skipped"
 						]
 					}
 				],
 				"policy": {
 					"timeout": "0.12:00:00",
-					"retry": 0,
-					"retryIntervalInSeconds": 30,
+					"retry": 2,
+					"retryIntervalInSeconds": 60,
 					"secureOutput": false,
 					"secureInput": false
 				},
@@ -251,7 +252,7 @@
 					"storedProcedureParameters": {
 						"error_message": {
 							"value": {
-								"value": "@activity('cp_src_to_bronze').error.message",
+								"value": "@coalesce(\n    activity('lkp_new_watermark')?.error?.message,\n    activity('cp_src_to_bronze')?.error?.message,\n    activity('sp_update_watermark')?.error?.message,\n    'failed - no error message captured'\n)",
 								"type": "Expression"
 							},
 							"type": "String"
