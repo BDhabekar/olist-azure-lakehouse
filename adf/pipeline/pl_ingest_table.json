@@ -252,7 +252,7 @@
 					"storedProcedureParameters": {
 						"error_message": {
 							"value": {
-								"value": "@coalesce(activity('cp_src_to_bronze').error.message, 'failed - no error message captured')",
+								"value": "@coalesce(\n    activity('lkp_new_watermark')?.error?.message,\n    activity('cp_src_to_bronze')?.error?.message,\n    activity('sp_update_watermark')?.error?.message,\n    'failed - no error message captured'\n)",
 								"type": "Expression"
 							},
 							"type": "String"
