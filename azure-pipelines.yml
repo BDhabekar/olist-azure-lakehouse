@@ -55,8 +55,11 @@ variables:
 # Every job runs on a Microsoft-hosted Ubuntu machine: nothing is installed anywhere, and the
 # machine is thrown away after the job. (A team with resources inside a private network would
 # name a self-hosted agent pool here instead.)
+# The image is named by its version, not as "ubuntu-latest": "latest" is moved to a newer
+# Ubuntu by Microsoft on a date of its choosing, and a deployment must not change because the
+# machine under it did. Moving to a newer image is a pull request like any other change.
 pool:
-  vmImage: ubuntu-latest
+  vmImage: ubuntu-24.04
 
 stages:
   # ===================================================================================
@@ -109,17 +112,20 @@ stages:
           # The Databricks CLI signs in through the Azure CLI, which this task has signed in as
           # dev's deployment identity. The job's definition is the same for both targets, so
           # validating the dev target checks it; prod's values are checked when prod is deployed.
+          # addSpnToEnvironment hands the script the Application ID of the identity it is signed
+          # in as (servicePrincipalId) - the bundle names that identity in its permissions.
           - task: AzureCLI@2
             displayName: databricks bundle validate (target dev)
             inputs:
               azureSubscription: ${{ variables.devServiceConnection }}
               useGlobalConfig: true
+              addSpnToEnvironment: true
               scriptType: pscore
               scriptLocation: inlineScript
               workingDirectory: $(Build.Repository.LocalPath)/databricks
               inlineScript: |
                 $env:DATABRICKS_HOST = '$(devDatabricksHost)'
-                databricks bundle validate -t dev --var="storage_account=$(devStorageAccount)" --var="run_as_sp=$(devRunAsSpAppId)"
+                databricks bundle validate -t dev --var="storage_account=$(devStorageAccount)" --var="run_as_sp=$(devRunAsSpAppId)" --var="deploy_sp=$env:servicePrincipalId"
                 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
   # ===================================================================================

@@ -11,6 +11,7 @@
 #   catalog          - the Unity Catalog catalog the load writes to
 #   storage_account  - the ADLS Gen2 account that holds the containers bronze, silver, gold
 #   run_as_sp        - Application ID of the service principal the job runs as
+#   deploy_sp        - Application ID of the identity that deploys (the pipeline's own sign-in)
 #
 # The workspace address is not written here: the deployment pipeline gives it (DATABRICKS_HOST).
 # =====================================================================================
@@ -33,6 +34,8 @@ variables:
     description: The ADLS Gen2 storage account that holds the containers bronze, silver and gold.
   run_as_sp:
     description: Application ID of the service principal the job runs as (an identifier, not a secret).
+  deploy_sp:
+    description: Application ID of the identity that deploys this bundle - the environment's deployment identity. The pipeline passes the one it is signed in as; it is not written in the repository.
   job_name:
     description: The name the job has in the workspace.
 
@@ -45,9 +48,13 @@ targets:
     run_as:
       service_principal_name: ${var.run_as_sp}
     # ...and that service principal may read and run what the bundle deploys (the notebooks).
+    # The identity that deploys is named too: who may manage the job and its folder is then
+    # written here, and does not depend on who happened to run the deployment.
     permissions:
       - service_principal_name: ${var.run_as_sp}
         level: CAN_RUN
+      - service_principal_name: ${var.deploy_sp}
+        level: CAN_MANAGE
     variables:
       catalog: olist_dev
       job_name: job_olist_lakehouse_dev
@@ -59,6 +66,8 @@ targets:
     permissions:
       - service_principal_name: ${var.run_as_sp}
         level: CAN_RUN
+      - service_principal_name: ${var.deploy_sp}
+        level: CAN_MANAGE
     variables:
       catalog: olist_prod
       job_name: job_olist_lakehouse_prod
