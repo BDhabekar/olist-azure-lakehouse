@@ -55,12 +55,19 @@ stages:
                   inputs:
                     azureSubscription: ${{ parameters.serviceConnection }}
                     useGlobalConfig: true
+                    # gives the script servicePrincipalId: the Application ID of this
+                    # environment's deployment identity, which the bundle names in its permissions
+                    addSpnToEnvironment: true
                     scriptType: pscore
                     scriptLocation: inlineScript
                     workingDirectory: $(Build.Repository.LocalPath)/databricks
                     inlineScript: |
                       $env:DATABRICKS_HOST = '$(${{ parameters.env }}DatabricksHost)'
-                      $vars = @('--var=storage_account=$(${{ parameters.env }}StorageAccount)', '--var=run_as_sp=$(${{ parameters.env }}RunAsSpAppId)')
+                      if ([string]::IsNullOrWhiteSpace($env:servicePrincipalId)) {
+                          Write-Host "##vso[task.logissue type=error]The service connection gave no Application ID (servicePrincipalId) for the deployment identity."
+                          exit 1
+                      }
+                      $vars = @('--var=storage_account=$(${{ parameters.env }}StorageAccount)', '--var=run_as_sp=$(${{ parameters.env }}RunAsSpAppId)', "--var=deploy_sp=$env:servicePrincipalId")
 
                       databricks bundle deploy -t ${{ parameters.env }} @vars
                       if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
@@ -94,6 +101,10 @@ stages:
                 # Microsoft's script, generated with the template: before the deployment it stops the
                 # triggers; after it, it deletes what is no longer in the template and starts the
                 # triggers whose definition says "Started".
+                # It is given the template's parameter file as well, so that it can read a trigger
+                # property that is a template parameter. (No trigger has one today. The file holds
+                # the repository's values - dev's: a trigger property that must differ in prod
+                # would also need its override handed to the script.)
                 - task: AzurePowerShell@5
                   displayName: Data Factory - stop the triggers
                   inputs:
@@ -104,7 +115,7 @@ stages:
                       $script = Join-Path $dir 'PrePostDeploymentScript.Ver2.ps1'
                       if (-not (Test-Path $script)) { $script = Join-Path $dir 'PrePostDeploymentScript.ps1' }
                       Write-Host "Using $script"
-                      & $script -armTemplate "$dir/ARMTemplateForFactory.json" -ResourceGroupName '$(${{ parameters.env }}ResourceGroup)' -DataFactoryName '$(${{ parameters.env }}FactoryName)' -predeployment $true -deleteDeployment $false
+                      & $script -armTemplate "$dir/ARMTemplateForFactory.json" -ArmTemplateParameters "$dir/ARMTemplateParametersForFactory.json" -ResourceGroupName '$(${{ parameters.env }}ResourceGroup)' -DataFactoryName '$(${{ parameters.env }}FactoryName)' -predeployment $true -deleteDeployment $false
                     azurePowerShellVersion: LatestVersion
                     pwsh: true
 
@@ -143,6 +154,6 @@ stages:
                       $script = Join-Path $dir 'PrePostDeploymentScript.Ver2.ps1'
                       if (-not (Test-Path $script)) { $script = Join-Path $dir 'PrePostDeploymentScript.ps1' }
                       Write-Host "Using $script"
-                      & $script -armTemplate "$dir/ARMTemplateForFactory.json" -ResourceGroupName '$(${{ parameters.env }}ResourceGroup)' -DataFactoryName '$(${{ parameters.env }}FactoryName)' -predeployment $false -deleteDeployment $true
+                      & $script -armTemplate "$dir/ARMTemplateForFactory.json" -ArmTemplateParameters "$dir/ARMTemplateParametersForFactory.json" -ResourceGroupName '$(${{ parameters.env }}ResourceGroup)' -DataFactoryName '$(${{ parameters.env }}FactoryName)' -predeployment $false -deleteDeployment $true
                     azurePowerShellVersion: LatestVersion
                     pwsh: true
