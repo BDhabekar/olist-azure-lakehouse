@@ -12,6 +12,9 @@
 #   3. Data Factory: stops the environment's triggers, applies the ARM template with the
 #      environment's values (storage, key vault, control database, Databricks workspace,
 #      job id), starts the triggers that are meant to run.
+#   4. Monitoring: creates or updates the environment's failure alert - an action group (one
+#      mail address, the secret pipeline variable alertEmail) and a metric alert rule on the
+#      factory (monitoring/alerts.bicep).
 #
 # Nothing here starts a cluster or runs a job.
 # =====================================================================================
@@ -157,3 +160,33 @@ stages:
                       & $script -armTemplate "$dir/ARMTemplateForFactory.json" -ArmTemplateParameters "$dir/ARMTemplateParametersForFactory.json" -ResourceGroupName '$(${{ parameters.env }}ResourceGroup)' -DataFactoryName '$(${{ parameters.env }}FactoryName)' -predeployment $false -deleteDeployment $true
                     azurePowerShellVersion: LatestVersion
                     pwsh: true
+
+                # ---- 4. Monitoring: the failure alert ------------------------------------------------
+                # Creates or updates, in the environment's resource group, the action group and the
+                # metric alert rule of monitoring/alerts.bicep. Incremental: nothing else in the
+                # resource group is touched. The deployment identity is Contributor on its own
+                # resource group, which covers both resource types; the subscription must have the
+                # resource provider microsoft.insights registered (done once, by hand, Oct 17).
+                - task: AzureCLI@2
+                  displayName: Monitoring - deploy the failure alert
+                  inputs:
+                    azureSubscription: ${{ parameters.serviceConnection }}
+                    scriptType: pscore
+                    scriptLocation: inlineScript
+                    inlineScript: |
+                      $mail = '$(alertEmail)'
+                      if ([string]::IsNullOrWhiteSpace($mail) -or $mail -like '*alertEmail*') {
+                          Write-Host "##vso[task.logissue type=error]The secret pipeline variable alertEmail is not set in Azure DevOps."
+                          exit 1
+                      }
+                      az deployment group create `
+                          --name "olist-alerts-${{ parameters.env }}-$(Build.BuildId)" `
+                          --resource-group '$(${{ parameters.env }}ResourceGroup)' `
+                          --template-file "$(Build.Repository.LocalPath)/monitoring/alerts.bicep" `
+                          --mode Incremental `
+                          --parameters env=${{ parameters.env }} `
+                                       factoryName='$(${{ parameters.env }}FactoryName)' `
+                                       severity=$(${{ parameters.env }}AlertSeverity) `
+                                       alertEmail="$mail" `
+                          --query "properties.provisioningState" --output tsv
+                      if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

@@ -13,3 +13,6 @@ variables:
   # prod's own Azure Databricks workspace: its name (for its resource id) and its address.
   prodDatabricksWorkspace: dbw-olist-prod
   prodDatabricksHost: https://adb-7405610387839643.3.azuredatabricks.net
+
+  # Severity of prod's failure alert (monitoring/alerts.bicep): 0 critical ... 4 verbose.
+  prodAlertSeverity: 1
