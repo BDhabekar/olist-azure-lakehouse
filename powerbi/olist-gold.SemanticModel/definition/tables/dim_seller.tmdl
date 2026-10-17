@@ -1,0 +1,46 @@
+table dim_seller
+	lineageTag: 5d534cae-bbc3-4e2d-8497-67a415b81497
+
+	column seller_id
+		dataType: string
+		lineageTag: f9ed0cc1-2aec-4767-b32a-05da528994ba
+		summarizeBy: none
+		sourceColumn: seller_id
+
+		annotation SummarizationSetBy = Automatic
+
+	column seller_zip_code_prefix
+		dataType: string
+		lineageTag: fd13d349-72b5-4258-ab80-f51980123fbd
+		summarizeBy: none
+		sourceColumn: seller_zip_code_prefix
+
+		annotation SummarizationSetBy = Automatic
+
+	column seller_city
+		dataType: string
+		lineageTag: f25f6837-0e98-4219-8366-57711fc945d6
+		summarizeBy: none
+		sourceColumn: seller_city
+
+		annotation SummarizationSetBy = Automatic
+
+	column seller_state
+		dataType: string
+		lineageTag: 3738543e-28e7-4de9-b25e-f071df649a7b
+		summarizeBy: none
+		sourceColumn: seller_state
+
+		annotation SummarizationSetBy = Automatic
+
+	partition dim_seller = m
+		mode: import
+		source =
+				let
+				    Source = Databricks.Catalogs("adb-7405610387839643.3.azuredatabricks.net", "sql/protocolv1/o/7405610387839643/1008-121742-qc95qie3", [Catalog=null, Database=null, QueryTags=null, EnableAutomaticProxyDiscovery=null, Implementation="2.0", Protocol=null]),
+				    olist_prod_Database = Source{[Name="olist_prod",Kind="Database"]}[Data],
+				    gold_Schema = olist_prod_Database{[Name="gold",Kind="Schema"]}[Data],
+				    dim_seller_Table = gold_Schema{[Name="dim_seller",Kind="Table"]}[Data]
+				in
+				    dim_seller_Table
+

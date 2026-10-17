@@ -1,0 +1,217 @@
+table fact_orders
+	lineageTag: 81fd8cb8-6197-4a60-b087-42ea8c024861
+
+	measure Revenue = CALCULATE ( SUM ( fact_orders[order_value] ), NOT fact_orders[order_status] IN { "canceled", "unavailable" } )
+		formatString: #,0.00
+		lineageTag: ec1a634d-c2e7-4070-b479-26fac624a3bb
+
+	measure Orders = CALCULATE ( COUNTROWS ( fact_orders ), NOT fact_orders[order_status] IN { "canceled", "unavailable" } )
+		formatString: #,0
+		lineageTag: 6792cd01-b554-4918-82e5-e98a7909cc2f
+
+	measure 'Average Order Value' = DIVIDE ( [Revenue], [Orders] )
+		formatString: #,0.00
+		lineageTag: ec478093-b76f-45ee-9d23-c18a601b07a4
+
+	measure 'Avg Delivery Days' = CALCULATE ( AVERAGE ( fact_orders[delivery_days] ), fact_orders[order_status] = "delivered" )
+		formatString: 0.00
+		lineageTag: d1d2669f-2402-4db3-8d76-bbd2f1f58a22
+
+	measure 'Late Delivery %' = DIVIDE ( CALCULATE ( COUNTROWS ( fact_orders ), fact_orders[is_late] = TRUE () ), CALCULATE ( COUNTROWS ( fact_orders ), fact_orders[order_status] = "delivered", NOT ISBLANK ( fact_orders[delivered_customer_ts] ) ) )
+		formatString: 0.00%;-0.00%;0.00%
+		lineageTag: a798e91a-eb1a-414d-a285-33172abdfe26
+
+	measure 'Avg Review Score' = AVERAGE ( fact_orders[review_score] )
+		formatString: 0.00
+		lineageTag: 478feba9-29cc-49c4-92a7-0a8066fcc424
+
+	column order_id
+		dataType: string
+		lineageTag: 6b17523c-64d4-47ae-9464-70d4554e29cb
+		summarizeBy: none
+		sourceColumn: order_id
+
+		annotation SummarizationSetBy = Automatic
+
+	column customer_id
+		dataType: string
+		lineageTag: 736dbdc9-8e64-44de-a486-a979cdd7019b
+		summarizeBy: none
+		sourceColumn: customer_id
+
+		annotation SummarizationSetBy = Automatic
+
+	column purchase_date_key
+		dataType: int64
+		formatString: 0
+		lineageTag: c0cfda66-3eb1-4f96-a488-d18fc68a2696
+		summarizeBy: none
+		sourceColumn: purchase_date_key
+
+		annotation SummarizationSetBy = Automatic
+
+	column order_status
+		dataType: string
+		lineageTag: 2e6cca1f-c5f9-4163-877b-17076c2e2ded
+		summarizeBy: none
+		sourceColumn: order_status
+
+		annotation SummarizationSetBy = Automatic
+
+	column purchase_ts
+		dataType: dateTime
+		formatString: General Date
+		lineageTag: 4042f056-c88d-45c9-baf3-9a17cdd02c6b
+		summarizeBy: none
+		sourceColumn: purchase_ts
+
+		variation Variation
+			isDefault
+			relationship: 99885fa2-2b99-4ad8-8808-0315a694e3b8
+			defaultHierarchy: LocalDateTable_6d4ca4bd-eba4-4403-9087-10c0ab7d6f76.'Date Hierarchy'
+
+		annotation SummarizationSetBy = Automatic
+
+	column approved_ts
+		dataType: dateTime
+		formatString: General Date
+		lineageTag: 3b014f7c-34a1-4ee6-95f0-0ca4cbfaf05c
+		summarizeBy: none
+		sourceColumn: approved_ts
+
+		variation Variation
+			isDefault
+			relationship: 81776ebb-6645-4e77-bdf7-1009114028cf
+			defaultHierarchy: LocalDateTable_cfd8dc15-31c3-43d1-8c6b-14cf273c3568.'Date Hierarchy'
+
+		annotation SummarizationSetBy = Automatic
+
+	column delivered_carrier_ts
+		dataType: dateTime
+		formatString: General Date
+		lineageTag: 298f1c21-4e91-47ce-b5ed-a1582951c5da
+		summarizeBy: none
+		sourceColumn: delivered_carrier_ts
+
+		variation Variation
+			isDefault
+			relationship: 991b20d4-8677-43a3-92c4-9cfacab6e204
+			defaultHierarchy: LocalDateTable_109cbaa6-4dcf-4c47-8c7e-a230dfce9f54.'Date Hierarchy'
+
+		annotation SummarizationSetBy = Automatic
+
+	column delivered_customer_ts
+		dataType: dateTime
+		formatString: General Date
+		lineageTag: 31eb1cdc-c81a-4178-b396-10b543c2e300
+		summarizeBy: none
+		sourceColumn: delivered_customer_ts
+
+		variation Variation
+			isDefault
+			relationship: b34e5465-764a-4527-afc7-850f524e204e
+			defaultHierarchy: LocalDateTable_d20c3fb1-9b64-4239-83ca-dffc6d7adcc1.'Date Hierarchy'
+
+		annotation SummarizationSetBy = Automatic
+
+	column estimated_delivery_ts
+		dataType: dateTime
+		formatString: General Date
+		lineageTag: d610e829-b506-4a8e-9733-eea8605d96b4
+		summarizeBy: none
+		sourceColumn: estimated_delivery_ts
+
+		variation Variation
+			isDefault
+			relationship: d301a50b-f00d-4a62-926f-5021818e3c8d
+			defaultHierarchy: LocalDateTable_0bb6d8a4-442b-4399-beae-3bb784a78ca6.'Date Hierarchy'
+
+		annotation SummarizationSetBy = Automatic
+
+	column items
+		dataType: int64
+		formatString: 0
+		lineageTag: e26671d0-7a57-424f-851a-f9d36c433732
+		summarizeBy: sum
+		sourceColumn: items
+
+		annotation SummarizationSetBy = Automatic
+
+	column items_value
+		dataType: double
+		lineageTag: c24bb8dd-5bf5-4e49-ac06-0d06857b7493
+		summarizeBy: sum
+		sourceColumn: items_value
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column freight_value
+		dataType: double
+		lineageTag: 362b5f8f-0402-43fd-b5a6-4f97c37d5534
+		summarizeBy: sum
+		sourceColumn: freight_value
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column order_value
+		dataType: double
+		lineageTag: b986ccac-4c54-4414-9794-9fd9f76dbdcb
+		summarizeBy: sum
+		sourceColumn: order_value
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column payment_value
+		dataType: double
+		lineageTag: a4587968-30df-4f8a-8c55-5e3b29687c49
+		summarizeBy: sum
+		sourceColumn: payment_value
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column review_score
+		dataType: int64
+		formatString: 0
+		lineageTag: 16badfb5-94be-476f-845b-382d30be8afb
+		summarizeBy: sum
+		sourceColumn: review_score
+
+		annotation SummarizationSetBy = Automatic
+
+	column delivery_days
+		dataType: int64
+		formatString: 0
+		lineageTag: eac63b4b-5848-4142-adf1-3d513e0f57bf
+		summarizeBy: sum
+		sourceColumn: delivery_days
+
+		annotation SummarizationSetBy = Automatic
+
+	column is_late
+		dataType: boolean
+		formatString: """TRUE"";""TRUE"";""FALSE"""
+		lineageTag: c3f35f77-53e5-4b47-a1d0-40c9cbec9c84
+		summarizeBy: none
+		sourceColumn: is_late
+
+		annotation SummarizationSetBy = Automatic
+
+	partition fact_orders = m
+		mode: import
+		source =
+				let
+				    Source = Databricks.Catalogs("adb-7405610387839643.3.azuredatabricks.net", "sql/protocolv1/o/7405610387839643/1008-121742-qc95qie3", [Catalog=null, Database=null, QueryTags=null, EnableAutomaticProxyDiscovery=null, Implementation="2.0", Protocol=null]),
+				    olist_prod_Database = Source{[Name="olist_prod",Kind="Database"]}[Data],
+				    gold_Schema = olist_prod_Database{[Name="gold",Kind="Schema"]}[Data],
+				    fact_orders_Table = gold_Schema{[Name="fact_orders",Kind="Table"]}[Data]
+				in
+				    fact_orders_Table
+

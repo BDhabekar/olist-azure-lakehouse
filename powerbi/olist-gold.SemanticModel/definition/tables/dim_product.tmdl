@@ -1,0 +1,83 @@
+table dim_product
+	lineageTag: 3e1e16d7-bb66-408e-aaf8-9dfed7a8a80f
+
+	column product_id
+		dataType: string
+		lineageTag: dae4d2b8-524c-4fd7-9493-89b55fa9cd34
+		summarizeBy: none
+		sourceColumn: product_id
+
+		annotation SummarizationSetBy = Automatic
+
+	column category_name
+		dataType: string
+		lineageTag: 1151c43f-74a0-478c-ad71-7b918f28cc51
+		summarizeBy: none
+		sourceColumn: category_name
+
+		annotation SummarizationSetBy = Automatic
+
+	column category_name_english
+		dataType: string
+		lineageTag: d671e7c1-b6da-48ee-9d96-ee74f0bc87e8
+		summarizeBy: none
+		sourceColumn: category_name_english
+
+		annotation SummarizationSetBy = Automatic
+
+	column product_weight_g
+		dataType: int64
+		formatString: 0
+		lineageTag: 68527f3e-bb51-4def-95b2-efd1e05417c2
+		summarizeBy: none
+		sourceColumn: product_weight_g
+
+		annotation SummarizationSetBy = Automatic
+
+	column product_length_cm
+		dataType: int64
+		formatString: 0
+		lineageTag: f41180de-66b5-4758-9f81-038628375a92
+		summarizeBy: none
+		sourceColumn: product_length_cm
+
+		annotation SummarizationSetBy = Automatic
+
+	column product_height_cm
+		dataType: int64
+		formatString: 0
+		lineageTag: 54761d5d-39a4-4e0f-910d-965a00f4c535
+		summarizeBy: none
+		sourceColumn: product_height_cm
+
+		annotation SummarizationSetBy = Automatic
+
+	column product_width_cm
+		dataType: int64
+		formatString: 0
+		lineageTag: 7c0e519a-7d7d-4a74-a25c-955be9d14bab
+		summarizeBy: none
+		sourceColumn: product_width_cm
+
+		annotation SummarizationSetBy = Automatic
+
+	column product_photos_qty
+		dataType: int64
+		formatString: 0
+		lineageTag: 3527bdc4-7a36-4149-a583-2011f7f5ceb9
+		summarizeBy: none
+		sourceColumn: product_photos_qty
+
+		annotation SummarizationSetBy = Automatic
+
+	partition dim_product = m
+		mode: import
+		source =
+				let
+				    Source = Databricks.Catalogs("adb-7405610387839643.3.azuredatabricks.net", "sql/protocolv1/o/7405610387839643/1008-121742-qc95qie3", [Catalog=null, Database=null, QueryTags=null, EnableAutomaticProxyDiscovery=null, Implementation="2.0", Protocol=null]),
+				    olist_prod_Database = Source{[Name="olist_prod",Kind="Database"]}[Data],
+				    gold_Schema = olist_prod_Database{[Name="gold",Kind="Schema"]}[Data],
+				    dim_product_Table = gold_Schema{[Name="dim_product",Kind="Table"]}[Data]
+				in
+				    dim_product_Table
+
