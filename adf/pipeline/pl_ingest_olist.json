@@ -122,7 +122,7 @@
 				}
 			},
 			{
-				"name": "job_bronze_silver",
+				"name": "job_lakehouse_load",
 				"type": "DatabricksJob",
 				"dependsOn": [
 					{
