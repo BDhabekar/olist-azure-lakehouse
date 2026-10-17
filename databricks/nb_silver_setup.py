@@ -6,6 +6,10 @@
 # MAGIC
 # MAGIC **Safe to run again.** Every statement first looks at what exists. On an environment that is already built it changes nothing; on an empty one it creates all twelve tables.
 # MAGIC
+# MAGIC **Who runs it.** The owner of the catalog, by hand, once per environment and after any change to a definition — not the load job: the load's service principal may not replace or alter a table (`nb_uc_grants`).
+# MAGIC
+# MAGIC **Cell 5 converts** a table whose source times are still stored as `TIMESTAMP` into the declared `TIMESTAMP_NTZ` (Oct 17): it rewrites the table in place under the UTC session time zone, proves every row came through unchanged, and puts the table back to its previous version if not.
+# MAGIC
 # MAGIC **Parameters** (the job passes them; by hand, type them into the boxes at the top):
 # MAGIC
 # MAGIC | Parameter | Meaning |
@@ -47,7 +51,9 @@ print(f"catalog = {CATALOG}   silver tables are stored under {SILVER}")
 # COMMAND ----------
 
 # Cell 4 - the definitions. One entry per table: its columns, and what one row is.
-# NOT NULL = the source guarantees the column is filled. The silver load reads these rules from the catalog
+# TIMESTAMP_NTZ = a time exactly as the source wrote it, with no time zone: the source's times carry none, so no
+# session may shift them (Oct 17, backlog B37). TIMESTAMP = a real moment our own pipeline recorded (_source_file_time,
+# _loaded_at, ...). NOT NULL = the source guarantees the column is filled. The silver load reads these rules from the catalog
 # and sets aside (quarantines) any row that breaks one, so tightening a rule is a change here and nowhere else.
 TABLES = {
 
@@ -56,12 +62,12 @@ TABLES = {
   order_id                       STRING    NOT NULL,
   customer_id                    STRING    NOT NULL,
   order_status                   STRING    NOT NULL,
-  order_purchase_timestamp       TIMESTAMP NOT NULL,
-  order_approved_at              TIMESTAMP,
-  order_delivered_carrier_date   TIMESTAMP,
-  order_delivered_customer_date  TIMESTAMP,
-  order_estimated_delivery_date  TIMESTAMP NOT NULL,
-  modified_at                    TIMESTAMP NOT NULL,
+  order_purchase_timestamp       TIMESTAMP_NTZ NOT NULL,
+  order_approved_at              TIMESTAMP_NTZ,
+  order_delivered_carrier_date   TIMESTAMP_NTZ,
+  order_delivered_customer_date  TIMESTAMP_NTZ,
+  order_estimated_delivery_date  TIMESTAMP_NTZ NOT NULL,
+  modified_at                    TIMESTAMP_NTZ NOT NULL,
   _source_file                   STRING,
   _source_file_time              TIMESTAMP""",
         "One row per order: the newest version of each order received from the source."),
@@ -72,7 +78,7 @@ TABLES = {
   customer_zip_code_prefix  STRING    NOT NULL,
   customer_city             STRING    NOT NULL,
   customer_state            STRING    NOT NULL,
-  modified_at               TIMESTAMP NOT NULL,
+  modified_at               TIMESTAMP_NTZ NOT NULL,
   _source_file              STRING,
   _source_file_time         TIMESTAMP""",
         "One row per customer_id, the id an order carries (customer_unique_id identifies the person): the newest version received from the source."),
@@ -82,10 +88,10 @@ TABLES = {
   order_item_id        INT           NOT NULL,
   product_id           STRING        NOT NULL,
   seller_id            STRING        NOT NULL,
-  shipping_limit_date  TIMESTAMP     NOT NULL,
+  shipping_limit_date  TIMESTAMP_NTZ     NOT NULL,
   price                DECIMAL(10,2) NOT NULL,
   freight_value        DECIMAL(10,2) NOT NULL,
-  modified_at          TIMESTAMP     NOT NULL,
+  modified_at          TIMESTAMP_NTZ     NOT NULL,
   _source_file         STRING,
   _source_file_time    TIMESTAMP""",
         "One row per item line of an order (order_id + order_item_id): the newest version received from the source."),
@@ -96,7 +102,7 @@ TABLES = {
   payment_type          STRING        NOT NULL,
   payment_installments  INT           NOT NULL,
   payment_value         DECIMAL(10,2) NOT NULL,
-  modified_at           TIMESTAMP     NOT NULL,
+  modified_at           TIMESTAMP_NTZ     NOT NULL,
   _source_file          STRING,
   _source_file_time     TIMESTAMP""",
         "One row per payment line of an order (order_id + payment_sequential): the newest version received from the source."),
@@ -107,9 +113,9 @@ TABLES = {
   review_score             INT       NOT NULL,
   review_comment_title     STRING,
   review_comment_message   STRING,
-  review_creation_date     TIMESTAMP NOT NULL,
-  review_answer_timestamp  TIMESTAMP NOT NULL,
-  modified_at              TIMESTAMP NOT NULL,
+  review_creation_date     TIMESTAMP_NTZ NOT NULL,
+  review_answer_timestamp  TIMESTAMP_NTZ NOT NULL,
+  modified_at              TIMESTAMP_NTZ NOT NULL,
   _source_file             STRING,
   _source_file_time        TIMESTAMP""",
         "One row per review of an order (review_id + order_id): the newest version received from the source."),
@@ -212,7 +218,71 @@ print(f"{len(TABLES)} table definitions, {len(RULES)} value rules")
 
 # COMMAND ----------
 
-# Cell 5 - BUILD: bring the silver schema to these definitions. Only what differs is changed.
+# Cell 5 - BUILD (one-time conversion, Oct 17): source times stored as TIMESTAMP become TIMESTAMP_NTZ.
+# For each existing table where a column declared TIMESTAMP_NTZ in cell 4 is still TIMESTAMP:
+#   1. note the table's current version and row count;
+#   2. REPLACE the table with its declared definition, same location (REPLACE keeps the history and the grants);
+#   3. copy the rows back from the previous version, each source time through CAST(... AS TIMESTAMP_NTZ);
+#   4. CHECK: same row count, and every old row, converted, has an identical new row (EXCEPT ALL = 0 rows);
+#   5. if the check fails: RESTORE the table to the noted version and stop.
+# The CAST gives the local time in the session time zone (Microsoft Learn, cast function, read Oct 17). The silver
+# load has always run on job clusters in UTC, so in UTC the wall-clock value comes out exactly as the source wrote it.
+# The value rules and maintenance properties that REPLACE may drop are put back by cell 6.
+# A table already converted, or not yet created, is skipped: on a second run this cell changes nothing.
+spark.conf.set("spark.sql.session.timeZone", "UTC")
+assert spark.conf.get("spark.sql.session.timeZone") == "UTC"
+
+def declared_ntz(columns):
+    return [line.split()[0] for line in columns.strip().splitlines() if line.split()[1].rstrip(",") == "TIMESTAMP_NTZ"]
+
+types_now = {}
+for r in spark.sql(f"""SELECT table_name, column_name, upper(data_type) AS data_type
+                       FROM {CATALOG}.information_schema.columns WHERE table_schema = 'silver'""").collect():
+    types_now.setdefault(r["table_name"], {})[r["column_name"]] = r["data_type"]
+
+property_list = ", ".join(f"'{k}' = '{v}'" for k, v in PROPERTIES.items())
+converted = []
+for t, (columns, comment) in TABLES.items():
+    ntz = declared_ntz(columns)
+    if t not in types_now or not ntz:
+        continue
+    to_convert = [c for c in ntz if types_now[t].get(c) == "TIMESTAMP"]
+    if not to_convert:
+        continue
+    full    = f"{CATALOG}.silver.{t}"
+    version = spark.sql(f"DESCRIBE HISTORY {full} LIMIT 1").first()["version"]
+    before  = spark.table(full).count()
+    names   = [line.split()[0] for line in columns.strip().splitlines()]
+    select  = ", ".join(f"CAST({c} AS TIMESTAMP_NTZ) AS {c}" if c in to_convert else c for c in names)
+
+    spark.sql(f"""
+        CREATE OR REPLACE TABLE {full} ({columns}
+        )
+        COMMENT '{comment}'
+        LOCATION '{SILVER}/{t}'
+        TBLPROPERTIES ({property_list}, 'delta.feature.timestampNtz' = 'supported')""")
+    spark.sql(f"INSERT INTO {full} ({', '.join(names)}) SELECT {select} FROM {full} VERSION AS OF {version}")
+
+    after   = spark.table(full).count()
+    missing = spark.sql(f"""SELECT COUNT(*) AS n FROM (
+                              SELECT {select} FROM {full} VERSION AS OF {version}
+                              EXCEPT ALL
+                              SELECT {', '.join(names)} FROM {full})""").first()["n"]
+    if after != before or missing != 0:
+        spark.sql(f"RESTORE TABLE {full} TO VERSION AS OF {version}")
+        raise RuntimeError(f"{full}: conversion check failed (rows before {before}, after {after}, rows not matched {missing}). "
+                           f"The table was restored to version {version}; nothing is changed.")
+    converted.append((t, ", ".join(to_convert), version, before, after, missing))
+
+if converted:
+    display(spark.createDataFrame(converted,
+        "table_name string, columns_converted string, version_before long, rows_before long, rows_after long, rows_not_matched long"))
+else:
+    print("Nothing to convert: every declared TIMESTAMP_NTZ column already has that type (or the table does not exist yet).")
+
+# COMMAND ----------
+
+# Cell 6 - BUILD: bring the silver schema to these definitions. Only what differs is changed.
 def table_properties(full_name):
     return {r["key"]: r["value"] for r in spark.sql(f"SHOW TBLPROPERTIES {full_name}").collect()}
 
@@ -261,7 +331,7 @@ display(spark.createDataFrame(actions,
 
 # COMMAND ----------
 
-# Cell 6 - CHECK: what the catalog holds now, one row per table. Claim: twelve tables, each with its
+# Cell 7 - CHECK: what the catalog holds now, one row per table. Claim: twelve tables, each with its
 # NOT NULL columns, its value rules, both maintenance properties and a comment.
 columns_now = {r["table_name"]: (r["n_columns"], r["n_not_null"]) for r in spark.sql(f"""
     SELECT table_name, COUNT(*) AS n_columns,
@@ -284,3 +354,17 @@ for t in TABLES:
 
 display(spark.createDataFrame(summary,
     "table_name string, columns long, not_null_columns long, value_rules string, maintenance_properties string, has_comment string"))
+
+# COMMAND ----------
+
+# Cell 8 - CHECK (Oct 17): the type of every time column, and the range of the order times to compare with the source.
+# Claim: the 13 source time columns are TIMESTAMP_NTZ, every other time column is TIMESTAMP; MIN and MAX of
+# order_purchase_timestamp equal the same query on the laptop's SQL Server (src.orders).
+display(spark.sql(f"""
+    SELECT table_name, column_name, data_type
+    FROM {CATALOG}.information_schema.columns
+    WHERE table_schema = 'silver' AND upper(data_type) LIKE 'TIMESTAMP%'
+    ORDER BY upper(data_type) DESC, table_name, ordinal_position"""))
+display(spark.sql(f"""
+    SELECT MIN(order_purchase_timestamp) AS first_order, MAX(order_purchase_timestamp) AS last_order, COUNT(*) AS orders
+    FROM {CATALOG}.silver.orders"""))
