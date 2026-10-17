@@ -37,6 +37,11 @@ dbutils.widgets.text("p_run_id", "")
 # Cell 3 - read the parameters. The notebook stops here if one is missing: a load must never guess its environment.
 import json, re, uuid
 
+# Every time literal and every conversion in this notebook is read in UTC, whatever the cluster's settings:
+# silver stores the source's times as TIMESTAMP_NTZ (Oct 17), and bronze's TIMESTAMP becomes the source's
+# wall-clock time only under UTC.
+spark.conf.set("spark.sql.session.timeZone", "UTC")
+
 CATALOG     = dbutils.widgets.get("p_catalog").strip()
 TABLES_JSON = dbutils.widgets.get("p_tables").strip()
 RUN_ID      = dbutils.widgets.get("p_run_id").strip() or "manual-" + str(uuid.uuid4())
@@ -118,13 +123,14 @@ for t, (key, newest, guard) in cfg.items():
 
         # 2. What the silver table promises (from the catalog): its columns, the NOT NULL columns, the CHECK rules
         info = spark.sql(f"""
-            SELECT column_name, is_nullable FROM {CATALOG}.information_schema.columns
+            SELECT column_name, is_nullable, upper(data_type) AS data_type FROM {CATALOG}.information_schema.columns
             WHERE table_schema = 'silver' AND table_name = '{t}'
             ORDER BY ordinal_position""").collect()
         if not info:
             raise ValueError(f"{silver} does not exist. Add its definition to nb_silver_setup and run that notebook first.")
         cols     = [r["column_name"] for r in info]
         required = [r["column_name"] for r in info if r["is_nullable"] == "NO"]
+        ntz      = {r["column_name"] for r in info if r["data_type"] == "TIMESTAMP_NTZ"}   # source times: bronze TIMESTAMP -> silver TIMESTAMP_NTZ
         if guard == "modified_at" and "modified_at" not in required:
             required.append("modified_at")
         checks = {r["key"].replace("delta.constraints.", ""): r["value"]
@@ -134,7 +140,8 @@ for t, (key, newest, guard) in cfg.items():
         has_hash = "row_hash" in cols
         business = [c for c in cols if c not in NOT_BUSINESS]
         from_bronze = [c for c in cols if c != "row_hash"]                      # the columns bronze really has
-        select_in   = ", ".join(from_bronze) + (f", {hash_expr(business)} AS row_hash" if has_hash else "")
+        select_in   = ", ".join(f"CAST({c} AS TIMESTAMP_NTZ) AS {c}" if c in ntz else c for c in from_bronze) \
+                      + (f", {hash_expr(business)} AS row_hash" if has_hash else "")
         col_list = ", ".join(cols)
         keys     = ", ".join(key)
         on       = " AND ".join(f"t.{k} = s.{k}" for k in key)
