@@ -19,6 +19,9 @@
 #   deploy_prod  The same package goes to  } cicd/templates/deploy-environment.yml.
 #                prod, after approval.     } Only the environment's values differ.
 #
+#                4. Builds monitoring/alerts.bicep (the failure alert) - a syntax and type
+#                   check; nothing is deployed by the build.
+#
 #   No step starts a cluster or runs a job. Deploying costs nothing in compute.
 #
 # WHAT DIFFERS BETWEEN DEV AND PROD - and nothing else does
@@ -28,6 +31,8 @@
 #     subscriptionId    - the Azure subscription
 #     devRunAsSpAppId   - Application ID of the service principal the dev job runs as
 #     prodRunAsSpAppId  - Application ID of the service principal the prod job runs as
+#     alertEmail        - SECRET: the mail address the failure alert is sent to
+#                         (monitoring/alerts.bicep); never written in this repository
 #
 # HOW IT SIGNS IN
 #   Through the service connections named in cicd/variables/common.yml, one per environment:
@@ -127,6 +132,16 @@ stages:
                 $env:DATABRICKS_HOST = '$(devDatabricksHost)'
                 databricks bundle validate -t dev --var="storage_account=$(devStorageAccount)" --var="run_as_sp=$(devRunAsSpAppId)" --var="deploy_sp=$env:servicePrincipalId"
                 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - job: monitoring
+        displayName: Monitoring - build the failure alert's template
+        steps:
+          # Compiles the Bicep file to an ARM template: a wrong property, type or resource name
+          # fails here, on the pull request, before anything reaches dev. Needs no sign-in.
+          - script: |
+              az bicep install
+              az bicep build --file "$(Build.Repository.LocalPath)/monitoring/alerts.bicep" --stdout > /dev/null
+            displayName: az bicep build monitoring/alerts.bicep
 
   # ===================================================================================
   # The same package, first to dev, then - after approval - to prod.
