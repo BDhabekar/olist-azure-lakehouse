@@ -1,7 +1,7 @@
 # =====================================================================================
-# The load job: bronze, then silver.
+# The load job: bronze, then silver, then gold.
 # -------------------------------------------------------------------------------------
-# Two notebook tasks on one job cluster. The cluster is created for the run and removed when
+# Three notebook tasks on one job cluster. The cluster is created for the run and removed when
 # the run ends; the job owns no machine between runs.
 #
 # The job is started by the Data Factory pipeline pl_ingest_olist (activity job_bronze_silver),
@@ -32,6 +32,14 @@ resources:
             - task_key: bronze_load
           notebook_task:
             notebook_path: ../nb_silver_load.py
+          job_cluster_key: olist_load_cluster
+
+        # gold starts only when silver has succeeded: the star schema is rebuilt from silver and reconciled to it
+        - task_key: gold_load
+          depends_on:
+            - task_key: silver_load
+          notebook_task:
+            notebook_path: ../nb_gold_load.py
           job_cluster_key: olist_load_cluster
 
       job_clusters:
