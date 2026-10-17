@@ -5,8 +5,8 @@
     "x": 20,
     "y": 180,
     "z": 4,
-    "width": 1880,
     "height": 420,
+    "width": 1880,
     "tabOrder": 4
   },
   "visual": {
@@ -84,8 +84,7 @@
             },
             "direction": "Ascending"
           }
-        ],
-        "isDefaultSort": false
+        ]
       }
     },
     "visualContainerObjects": {

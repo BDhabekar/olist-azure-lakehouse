@@ -9,12 +9,12 @@
 # MAGIC | the catalog | `USE CATALOG` | must be able to enter the catalog at all |
 # MAGIC | schema `bronze` | `USE SCHEMA`, `SELECT`, `MODIFY`, `CREATE TABLE` | creates a bronze table the first time it meets one, loads it with `COPY INTO`, counts it, writes its audit rows |
 # MAGIC | schema `silver` | `USE SCHEMA`, `SELECT`, `MODIFY` | reads what each table promises, merges into it, writes the quarantine, the audit rows and the bookmark. It creates nothing here: the silver tables are defined by `nb_silver_setup` |
-# MAGIC | schema `gold` | `USE SCHEMA`, `SELECT`, `MODIFY` | loads the gold tables (the gold layer is the next piece of the project) |
+# MAGIC | schema `gold` | `USE SCHEMA`, `SELECT`, `MODIFY` | rebuilds the gold tables (`INSERT OVERWRITE`) and reads them for its checks. It creates nothing here: the gold tables are defined by `nb_gold_setup` |
 # MAGIC | the external location of the landing files and the bronze tables | `READ FILES`, `CREATE EXTERNAL TABLE` | reads the Parquet files Data Factory landed (`COPY INTO … FROM 'abfss://…'`) and creates a bronze table at a path |
 # MAGIC
 # MAGIC A privilege given on a schema reaches every table in it: the ones there now and the ones made later.
 # MAGIC
-# MAGIC **Not granted:** `ALL PRIVILEGES`, `MANAGE`, ownership, `WRITE FILES`, anything on another catalog. The load cannot drop a table, change who may read it, or write loose files into the lake.
+# MAGIC **Not granted:** `ALL PRIVILEGES`, `MANAGE`, ownership, `WRITE FILES`, anything on another catalog. The load cannot drop or alter a silver or gold table, change who may read a table, or write loose files into the lake. It does own the bronze tables, because it creates each one the first time it meets it (a named exception: production would create them in the set-up step too).
 # MAGIC
 # MAGIC **Parameters** (type them into the boxes at the top):
 # MAGIC

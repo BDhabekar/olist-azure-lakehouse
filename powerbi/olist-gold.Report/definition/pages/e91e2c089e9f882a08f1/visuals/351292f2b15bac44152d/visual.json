@@ -5,8 +5,8 @@
     "x": 960,
     "y": 620,
     "z": 6,
-    "width": 940,
     "height": 440,
+    "width": 940,
     "tabOrder": 6
   },
   "visual": {
@@ -75,8 +75,7 @@
             },
             "direction": "Descending"
           }
-        ],
-        "isDefaultSort": false
+        ]
       }
     },
     "visualContainerObjects": {

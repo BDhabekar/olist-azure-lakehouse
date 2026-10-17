@@ -14,21 +14,22 @@
 #                   parameter of that template (an environment would silently keep the
 #                   value written in the repository).
 #                3. Databricks: validates the bundle (the job, its cluster, its notebooks).
+#                4. Monitoring: builds monitoring/alerts.bicep (the failure alert) - a syntax and
+#                   type check; nothing is deployed by the build.
 #
 #   deploy_dev   The package goes to dev.  } The same steps, from one template:
 #   deploy_prod  The same package goes to  } cicd/templates/deploy-environment.yml.
-#                prod, after approval.     } Only the environment's values differ.
-#
-#                4. Builds monitoring/alerts.bicep (the failure alert) - a syntax and type
-#                   check; nothing is deployed by the build.
+#                prod, after approval.     } Only the environment's values differ. Each
+#                                          } deployment also creates or updates the alert.
 #
 #   No step starts a cluster or runs a job. Deploying costs nothing in compute.
 #
 # WHAT DIFFERS BETWEEN DEV AND PROD - and nothing else does
 #   cicd/variables/dev.yml, cicd/variables/prod.yml : the names of each environment's resources,
 #                                                     its Databricks workspace among them.
-#   Pipeline variables (set in Azure DevOps, not kept in this repository):
-#     subscriptionId    - the Azure subscription
+#   Pipeline variables (set in Azure DevOps):
+#     subscriptionId    - the Azure subscription (Data Factory's own files under adf/ also carry it,
+#                         inside resource ids)
 #     devRunAsSpAppId   - Application ID of the service principal the dev job runs as
 #     prodRunAsSpAppId  - Application ID of the service principal the prod job runs as
 #     alertEmail        - SECRET: the mail address the failure alert is sent to
@@ -74,15 +75,17 @@ stages:
       - job: adf
         displayName: Data Factory - validate and generate the ARM template
         steps:
+          # Node.js on an LTS line (cicd/variables/common.yml), as Microsoft's build package asks.
           - task: UseNode@1
-            displayName: Install Node.js 20
+            displayName: Install Node.js (LTS)
             inputs:
-              version: '20.x'
+              version: $(nodeVersion)
 
+          # "ci" installs exactly what package-lock.json lists: the same package on every run.
           - task: Npm@1
             displayName: Install Microsoft's Data Factory build package
             inputs:
-              command: install
+              command: ci
               workingDir: $(Build.Repository.LocalPath)/cicd/adf-build
 
           # "export" validates first, then writes the template to cicd/adf-build/ArmTemplate.
@@ -110,8 +113,9 @@ stages:
       - job: bundle
         displayName: Databricks - validate the bundle
         steps:
-          - script: curl -fsSL https://raw.githubusercontent.com/databricks/setup-cli/main/install.sh | sh
-            displayName: Install the Databricks CLI
+          # The install script of one release tag installs exactly that CLI version (cicd/variables/common.yml).
+          - script: curl -fsSL https://raw.githubusercontent.com/databricks/setup-cli/$(databricksCliVersion)/install.sh | sh
+            displayName: Install the Databricks CLI (pinned)
             condition: and(succeeded(), eq(variables['Agent.OS'], 'Linux'))
 
           # The Databricks CLI signs in through the Azure CLI, which this task has signed in as
@@ -138,8 +142,12 @@ stages:
         steps:
           # Compiles the Bicep file to an ARM template: a wrong property, type or resource name
           # fails here, on the pull request, before anything reaches dev. Needs no sign-in.
+          # The pinned Bicep (cicd/variables/common.yml), not whichever one the agent image carries.
           - script: |
-              az bicep install
+              set -e
+              az config set bicep.use_binary_from_path=false
+              az bicep install --version $(bicepVersion)
+              az bicep version
               az bicep build --file "$(Build.Repository.LocalPath)/monitoring/alerts.bicep" --stdout > /dev/null
             displayName: az bicep build monitoring/alerts.bicep
 

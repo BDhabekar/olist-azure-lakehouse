@@ -1,0 +1,4 @@
+# For scripts/load_olist.py (also needs Microsoft ODBC Driver 18 for SQL Server installed)
+pandas>=1.5
+SQLAlchemy>=1.4.17
+pyodbc>=4.0

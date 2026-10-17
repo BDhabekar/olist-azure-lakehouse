@@ -1,33 +1,3 @@
-relationship ba7afbd4-6fb1-4246-a119-eed04333f9e2
-	joinOnDateBehavior: datePartOnly
-	fromColumn: fact_order_items.shipping_limit_ts
-	toColumn: LocalDateTable_9264b90e-a1f8-41d2-98ec-1372f9b6e53d.Date
-
-relationship 99885fa2-2b99-4ad8-8808-0315a694e3b8
-	joinOnDateBehavior: datePartOnly
-	fromColumn: fact_orders.purchase_ts
-	toColumn: LocalDateTable_6d4ca4bd-eba4-4403-9087-10c0ab7d6f76.Date
-
-relationship 81776ebb-6645-4e77-bdf7-1009114028cf
-	joinOnDateBehavior: datePartOnly
-	fromColumn: fact_orders.approved_ts
-	toColumn: LocalDateTable_cfd8dc15-31c3-43d1-8c6b-14cf273c3568.Date
-
-relationship 991b20d4-8677-43a3-92c4-9cfacab6e204
-	joinOnDateBehavior: datePartOnly
-	fromColumn: fact_orders.delivered_carrier_ts
-	toColumn: LocalDateTable_109cbaa6-4dcf-4c47-8c7e-a230dfce9f54.Date
-
-relationship b34e5465-764a-4527-afc7-850f524e204e
-	joinOnDateBehavior: datePartOnly
-	fromColumn: fact_orders.delivered_customer_ts
-	toColumn: LocalDateTable_d20c3fb1-9b64-4239-83ca-dffc6d7adcc1.Date
-
-relationship d301a50b-f00d-4a62-926f-5021818e3c8d
-	joinOnDateBehavior: datePartOnly
-	fromColumn: fact_orders.estimated_delivery_ts
-	toColumn: LocalDateTable_0bb6d8a4-442b-4399-beae-3bb784a78ca6.Date
-
 relationship AutoDetected_8996b026-ccac-45a4-afee-3f8994adf23b
 	fromColumn: fact_order_items.customer_id
 	toColumn: dim_customer.customer_id

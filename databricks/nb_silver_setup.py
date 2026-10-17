@@ -10,7 +10,7 @@
 # MAGIC
 # MAGIC **Cell 5 converts** a table whose source times are still stored as `TIMESTAMP` into the declared `TIMESTAMP_NTZ` (Oct 17): it rewrites the table in place under the UTC session time zone, proves every row came through unchanged, and puts the table back to its previous version if not.
 # MAGIC
-# MAGIC **Parameters** (the job passes them; by hand, type them into the boxes at the top):
+# MAGIC **Parameters** (type them into the boxes at the top):
 # MAGIC
 # MAGIC | Parameter | Meaning |
 # MAGIC |---|---|
@@ -19,7 +19,7 @@
 # MAGIC
 # MAGIC Nothing about the environment is typed into a cell. The same file runs in development and in production.
 # MAGIC
-# MAGIC Written from the catalog's own definitions (`SHOW CREATE TABLE`, Tue 6 Oct 2026). The build record that led here is `nb_silver_merge`.
+# MAGIC Written from the catalog's own definitions (`SHOW CREATE TABLE`, Tue 6 Oct 2026).
 
 # COMMAND ----------
 
@@ -52,7 +52,7 @@ print(f"catalog = {CATALOG}   silver tables are stored under {SILVER}")
 
 # Cell 4 - the definitions. One entry per table: its columns, and what one row is.
 # TIMESTAMP_NTZ = a time exactly as the source wrote it, with no time zone: the source's times carry none, so no
-# session may shift them (Oct 17, backlog B37). TIMESTAMP = a real moment our own pipeline recorded (_source_file_time,
+# session may shift them (Oct 17). TIMESTAMP = a real moment our own pipeline recorded (_source_file_time,
 # _loaded_at, ...). NOT NULL = the source guarantees the column is filled. The silver load reads these rules from the catalog
 # and sets aside (quarantines) any row that breaks one, so tightening a rule is a change here and nowhere else.
 TABLES = {
@@ -230,7 +230,8 @@ print(f"{len(TABLES)} table definitions, {len(RULES)} value rules")
 #   4. CHECK: same row count, and every old row, converted, has an identical new row (EXCEPT ALL = 0 rows);
 #   5. if the check fails: RESTORE the table to the noted version and stop.
 # Before step 2 the table's time-travel window is widened to 30 days (PROPERTIES): step 3 reads the previous version,
-# whose last write can be older than the default 7 days (Oct 17, dev: refused at step 3, orders left empty).
+# whose last write can be older than the default 7 days. (Learned on the first conversion in dev, Oct 17: the default
+# refused step 3 after the REPLACE; the RESUME branch below then completed the table from the version before it.)
 # RESUME: a table whose last operation is a REPLACE and which holds no rows is a conversion stopped after step 2;
 # it is completed from the version before the REPLACE.
 # The CAST gives the local time in the session time zone (Microsoft Learn, cast function, read Oct 17). The silver

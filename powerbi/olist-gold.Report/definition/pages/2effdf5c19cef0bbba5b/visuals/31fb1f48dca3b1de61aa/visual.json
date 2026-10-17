@@ -5,8 +5,8 @@
     "x": 1240,
     "y": 180,
     "z": 6,
-    "width": 660,
     "height": 440,
+    "width": 660,
     "tabOrder": 6
   },
   "visual": {
@@ -34,6 +34,13 @@
         }
       }
     },
+    "objects": {
+      "general": [
+        {
+          "properties": {}
+        }
+      ]
+    },
     "visualContainerObjects": {
       "title": [
         {
@@ -57,5 +64,23 @@
       ]
     },
     "drillFilterOtherVisuals": true
+  },
+  "filterConfig": {
+    "filters": [
+      {
+        "name": "338783efee529d8aec15",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "dim_customer"
+              }
+            },
+            "Property": "customer_state"
+          }
+        },
+        "type": "Categorical"
+      }
+    ]
   }
 }

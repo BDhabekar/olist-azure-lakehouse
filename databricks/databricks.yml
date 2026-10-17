@@ -22,7 +22,7 @@ bundle:
 include:
   - resources/*.yml
 
-# The build-record notebooks (*.ipynb) are history, not part of the load: they are not uploaded.
+# Exported notebooks (*.ipynb) are never uploaded: the job runs the .py files.
 sync:
   exclude:
     - "*.ipynb"

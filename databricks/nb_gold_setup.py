@@ -8,7 +8,7 @@
 # MAGIC
 # MAGIC **Safe to run again.** A table that exists is left as it is; properties and comments are set only where they differ.
 # MAGIC
-# MAGIC **One cluster at a time.** The subscription may run 6 cores in Central India: never run this while the load job runs (Oct 17).
+# MAGIC **One cluster at a time.** Lab quota: the subscription allows one 4-core cluster at a time in its region, so the set-up cluster is terminated before the load job runs.
 # MAGIC
 # MAGIC | Parameter | Meaning |
 # MAGIC |---|---|

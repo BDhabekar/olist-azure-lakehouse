@@ -25,6 +25,7 @@ resources:
           notebook_task:
             notebook_path: ../nb_bronze_load.py
           job_cluster_key: olist_load_cluster
+          timeout_seconds: 1800
 
         # silver starts only when bronze has succeeded
         - task_key: silver_load
@@ -33,6 +34,7 @@ resources:
           notebook_task:
             notebook_path: ../nb_silver_load.py
           job_cluster_key: olist_load_cluster
+          timeout_seconds: 1800
 
         # gold starts only when silver has succeeded: the star schema is rebuilt from silver and reconciled to it
         - task_key: gold_load
@@ -41,6 +43,7 @@ resources:
           notebook_task:
             notebook_path: ../nb_gold_load.py
           job_cluster_key: olist_load_cluster
+          timeout_seconds: 1800
 
       job_clusters:
         - job_cluster_key: olist_load_cluster
@@ -56,6 +59,10 @@ resources:
       # a second start while a run is active waits in a queue instead of failing
       queue:
         enabled: true
+
+      # a run that hangs is stopped instead of holding a cluster: 30 minutes per task above, 60 for the
+      # whole job - the same 60 minutes the Data Factory activity that starts the job waits
+      timeout_seconds: 3600
 
       parameters:
         - name: p_catalog
