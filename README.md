@@ -316,7 +316,7 @@ azure-pipelines.yml     build → dev → prod
 
 ## How it was built
 
-Built in October 2026, in two steps. First a single environment — ingestion, bronze, silver and the job — each piece proven with real runs. Then dev and prod were created new, side by side, and filled only by the pipeline; every change since has gone through a pull request (#1 to #8). The repository's first commits still show the Data Factory of that first environment, practice objects included; they were removed in `f61fed7`.
+Built in October 2026, in two steps. First a single environment — ingestion, bronze, silver and the job — each piece proven with real runs. Then dev and prod were created new, side by side, and filled only by the pipeline; every change since has gone through a [pull request](https://github.com/BDhabekar/olist-azure-lakehouse/pulls?q=is%3Apr+is%3Aclosed). The repository's first commits still show the Data Factory of that first environment, practice objects included; they were removed in `f61fed7`.
 
 I built this with an AI assistant (Claude) as mentor and pair-programmer. The design decisions, the Azure build, and every run and check are mine; much of the code — notebooks, SQL scripts, pipeline YAML — was drafted with the assistant and reviewed and run by me.
 
