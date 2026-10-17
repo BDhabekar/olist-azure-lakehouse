@@ -1,0 +1,120 @@
+table fact_order_items
+	lineageTag: a1d45ab8-4345-491e-98f7-7bfefc56604c
+
+	measure 'Item Revenue' = CALCULATE ( SUM ( fact_order_items[item_total] ), NOT fact_order_items[order_status] IN { "canceled", "unavailable" } )
+		formatString: #,0.00
+		lineageTag: b8f2fb7f-a39c-42fc-a816-cbfb2cd0fb40
+
+	column order_id
+		dataType: string
+		lineageTag: c8cdf752-1580-426f-a9ac-5693b2ec5124
+		summarizeBy: none
+		sourceColumn: order_id
+
+		annotation SummarizationSetBy = Automatic
+
+	column order_item_id
+		dataType: int64
+		formatString: 0
+		lineageTag: 1099d987-7ab8-4469-9164-cdbb8d855e98
+		summarizeBy: sum
+		sourceColumn: order_item_id
+
+		annotation SummarizationSetBy = Automatic
+
+	column customer_id
+		dataType: string
+		lineageTag: 969c989a-44a6-4f1c-99c0-625c67d287b0
+		summarizeBy: none
+		sourceColumn: customer_id
+
+		annotation SummarizationSetBy = Automatic
+
+	column product_id
+		dataType: string
+		lineageTag: ba4e8478-2372-461e-9515-470cc93e6393
+		summarizeBy: none
+		sourceColumn: product_id
+
+		annotation SummarizationSetBy = Automatic
+
+	column seller_id
+		dataType: string
+		lineageTag: f5c78dae-3173-42d3-9db6-b3eafcd7ebee
+		summarizeBy: none
+		sourceColumn: seller_id
+
+		annotation SummarizationSetBy = Automatic
+
+	column purchase_date_key
+		dataType: int64
+		formatString: 0
+		lineageTag: c163b048-3aba-4ab4-970a-62b692ed46d3
+		summarizeBy: none
+		sourceColumn: purchase_date_key
+
+		annotation SummarizationSetBy = Automatic
+
+	column order_status
+		dataType: string
+		lineageTag: c6ebad31-0d05-473f-8093-9752e84f9f49
+		summarizeBy: none
+		sourceColumn: order_status
+
+		annotation SummarizationSetBy = Automatic
+
+	column price
+		dataType: double
+		lineageTag: 57940aef-21a2-42f2-a92b-f6010febf7de
+		summarizeBy: sum
+		sourceColumn: price
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column freight_value
+		dataType: double
+		lineageTag: 11e755ca-fab0-42b4-9d1a-b33f8a59f721
+		summarizeBy: sum
+		sourceColumn: freight_value
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column item_total
+		dataType: double
+		lineageTag: 0cecc237-9c39-41fd-a302-f86047d8e3b4
+		summarizeBy: sum
+		sourceColumn: item_total
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column shipping_limit_ts
+		dataType: dateTime
+		formatString: General Date
+		lineageTag: 023240af-ce3c-4340-945c-29f0b4cdeec9
+		summarizeBy: none
+		sourceColumn: shipping_limit_ts
+
+		variation Variation
+			isDefault
+			relationship: ba7afbd4-6fb1-4246-a119-eed04333f9e2
+			defaultHierarchy: LocalDateTable_9264b90e-a1f8-41d2-98ec-1372f9b6e53d.'Date Hierarchy'
+
+		annotation SummarizationSetBy = Automatic
+
+	partition fact_order_items = m
+		mode: import
+		source =
+				let
+				    Source = Databricks.Catalogs("adb-7405610387839643.3.azuredatabricks.net", "sql/protocolv1/o/7405610387839643/1008-121742-qc95qie3", [Catalog=null, Database=null, QueryTags=null, EnableAutomaticProxyDiscovery=null, Implementation="2.0", Protocol=null]),
+				    olist_prod_Database = Source{[Name="olist_prod",Kind="Database"]}[Data],
+				    gold_Schema = olist_prod_Database{[Name="gold",Kind="Schema"]}[Data],
+				    fact_order_items_Table = gold_Schema{[Name="fact_order_items",Kind="Table"]}[Data]
+				in
+				    fact_order_items_Table
+

@@ -1,0 +1,5 @@
+# Power BI Project: keep the definitions (text), not the data or personal settings
+**/.pbi/localSettings.json
+**/.pbi/cache.abf
+# the binary copy with the data inside is not versioned
+*.pbix
