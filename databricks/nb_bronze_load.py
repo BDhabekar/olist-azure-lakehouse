@@ -15,7 +15,7 @@
 # MAGIC | `p_tables` | the list of tables as JSON — the rows of the control table `etl.ingest_config`, handed over by Data Factory. This notebook uses `table_name` |
 # MAGIC | `p_run_id` | the pipeline's run id, written to the audit rows. Left empty on a run by hand: the notebook then makes one that starts with `manual-` |
 # MAGIC
-# MAGIC No storage account, catalog or table name is typed into a cell. The build record that led here is `nb_bronze_copy_into`.
+# MAGIC No storage account, catalog or table name is typed into a cell.
 
 # COMMAND ----------
 

@@ -100,11 +100,6 @@ table fact_order_items
 		summarizeBy: none
 		sourceColumn: shipping_limit_ts
 
-		variation Variation
-			isDefault
-			relationship: ba7afbd4-6fb1-4246-a119-eed04333f9e2
-			defaultHierarchy: LocalDateTable_9264b90e-a1f8-41d2-98ec-1372f9b6e53d.'Date Hierarchy'
-
 		annotation SummarizationSetBy = Automatic
 
 	partition fact_order_items = m

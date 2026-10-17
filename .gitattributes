@@ -1,0 +1,11 @@
+# Text files are stored with LF line endings in the repository and checked out in each
+# platform's own style.
+* text=auto
+
+# Windows batch files keep CRLF on every platform: cmd.exe needs it.
+*.cmd text eol=crlf
+
+# Binary files are never converted.
+*.png binary
+*.pbix binary
+*.abf binary

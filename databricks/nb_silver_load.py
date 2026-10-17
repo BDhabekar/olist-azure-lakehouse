@@ -9,7 +9,7 @@
 # MAGIC 3. sets aside the rows of the window that break a rule (`silver.quarantine`, with the rule's name, recorded once);
 # MAGIC 4. keeps the newest row per key from the good rows;
 # MAGIC 5. merges them into the silver table — inserted when the key is new, updated only when the row is newer (and, for the reference tables, only when its content changed);
-# MAGIC 6. checks that no key is held twice;
+# MAGIC 6. checks that no key is held twice - and fails the table if one is;
 # MAGIC 7. writes one audit row (`silver.load_audit`) and moves the bookmark — last, and only forward.
 # MAGIC
 # MAGIC Run twice over the same data it changes nothing the second time.
@@ -22,7 +22,7 @@
 # MAGIC | `p_tables` | the list of tables as JSON — the rows of the control table `etl.ingest_config`, handed over by Data Factory. This notebook uses `table_name`, `load_type` and `key_columns` |
 # MAGIC | `p_run_id` | the pipeline's run id, written to the audit rows. Left empty on a run by hand: the notebook then makes one that starts with `manual-` |
 # MAGIC
-# MAGIC No catalog or table name is typed into a cell, and no storage account is needed: the tables are reached by name. The silver tables themselves are defined in `nb_silver_setup`. The build record that led here is `nb_silver_merge` (its cell 43 is this load).
+# MAGIC No catalog or table name is typed into a cell, and no storage account is needed: the tables are reached by name. The silver tables themselves are defined in `nb_silver_setup`.
 
 # COMMAND ----------
 
@@ -185,8 +185,11 @@ for t, (key, newest, guard) in cfg.items():
             WHEN MATCHED AND {update_if} THEN UPDATE SET *
             WHEN NOT MATCHED THEN INSERT *""").first()
 
-        # 6. CHECK: no key twice in silver
+        # 6. CHECK: no key twice in silver. A key held twice would be counted twice in every gold total, so the
+        #    table fails here: the except branch below writes a "failed" audit row and the bookmark is not moved.
         dup = spark.sql(f"SELECT {keys} FROM {silver} GROUP BY {keys} HAVING COUNT(*) > 1").count()
+        if dup > 0:
+            raise RuntimeError(f"{silver} holds {dup} key(s) more than once after the MERGE; the bookmark is not moved.")
 
         # 7. Record the run, then move the bookmark LAST - and only forward
         audit(t, "succeeded", old_mark, new_mark, started, rows_read, q["num_inserted_rows"],

@@ -2,9 +2,9 @@
 # MAGIC %md
 # MAGIC # nb_gold_load — silver becomes the gold star schema, rebuilt and reconciled
 # MAGIC
-# MAGIC **What this notebook does.** Rebuilds every gold table from silver with `INSERT OVERWRITE` (Decision 16a = A, Oct 17): dimensions, then facts, then KPI tables. Then it reconciles gold to silver and **fails the run** if any check fails — a failed job fails the Data Factory pipeline, and the failure alert mails.
+# MAGIC **What this notebook does.** Rebuilds every gold table from silver with `INSERT OVERWRITE`: dimensions, then facts, then KPI tables. Then it reconciles gold to silver and **fails the run** if any check fails — a failed job fails the Data Factory pipeline, and the failure alert mails.
 # MAGIC
-# MAGIC **Why a full rebuild.** Gold is derived and small (about 190,000 rows): a rebuild takes seconds, can never drift from silver, and a second run gives the same result. Incremental processing lives where the volume is — the watermark at ingestion, `COPY INTO` in bronze, the bookmark and `MERGE` in silver. At 100 times the data, gold would switch to silver's change data feed and a `MERGE` of the changed orders.
+# MAGIC **Why a full rebuild.** Gold is derived and small (about 225,000 rows): a rebuild takes seconds, can never drift from silver, and a second run gives the same result. Incremental processing lives where the volume is — the watermark at ingestion, `COPY INTO` in bronze, the bookmark and `MERGE` in silver. At 100 times the data, gold would switch to silver's change data feed and a `MERGE` of the changed orders.
 # MAGIC
 # MAGIC **Run as** the load's service principal (the job's third task, after `silver_load`). It may write gold rows (`MODIFY`) but not create tables: the tables are defined by `nb_gold_setup`.
 # MAGIC

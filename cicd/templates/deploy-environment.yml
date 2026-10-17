@@ -48,8 +48,9 @@ stages:
                 - checkout: self
                 # The artifact adf-arm is downloaded automatically to $(Pipeline.Workspace)/adf-arm.
 
-                - script: curl -fsSL https://raw.githubusercontent.com/databricks/setup-cli/main/install.sh | sh
-                  displayName: Install the Databricks CLI
+                # The install script of one release tag installs exactly that CLI version (cicd/variables/common.yml).
+                - script: curl -fsSL https://raw.githubusercontent.com/databricks/setup-cli/$(databricksCliVersion)/install.sh | sh
+                  displayName: Install the Databricks CLI (pinned)
                   condition: and(succeeded(), eq(variables['Agent.OS'], 'Linux'))
 
                 # ---- 1. Databricks: the job, its cluster definition and its notebooks ----------
@@ -166,7 +167,7 @@ stages:
                 # metric alert rule of monitoring/alerts.bicep. Incremental: nothing else in the
                 # resource group is touched. The deployment identity is Contributor on its own
                 # resource group, which covers both resource types; the subscription must have the
-                # resource provider microsoft.insights registered (done once, by hand, Oct 17).
+                # resource provider microsoft.insights registered (a one-time step per subscription).
                 - task: AzureCLI@2
                   displayName: Monitoring - deploy the failure alert
                   inputs:
@@ -179,6 +180,10 @@ stages:
                           Write-Host "##vso[task.logissue type=error]The secret pipeline variable alertEmail is not set in Azure DevOps."
                           exit 1
                       }
+                      # The pinned Bicep (cicd/variables/common.yml), not whichever one the agent image carries.
+                      az config set bicep.use_binary_from_path=false
+                      az bicep install --version '$(bicepVersion)'
+                      if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
                       az deployment group create `
                           --name "olist-alerts-${{ parameters.env }}-$(Build.BuildId)" `
                           --resource-group '$(${{ parameters.env }}ResourceGroup)' `

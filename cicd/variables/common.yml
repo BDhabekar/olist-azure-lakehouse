@@ -1,6 +1,7 @@
 # Values that are the same for every environment.
-# Nothing here is a secret. Identifiers of the subscription and of identities are NOT kept in the
-# repository: they are pipeline variables, set in Azure DevOps (see azure-pipelines.yml, top).
+# Nothing here is a secret. The subscription id and the identities' Application IDs are pipeline
+# variables, set in Azure DevOps (see azure-pipelines.yml, top). Data Factory's own files under adf/
+# do carry resource ids, which contain the subscription id: Data Factory writes them that way.
 
 variables:
   # The Azure DevOps service connections the pipeline signs in to Azure with - one per
@@ -23,3 +24,14 @@ variables:
   # definition.json adds them (Microsoft's default list plus "domain" and "workspaceResourceId").
   armParamDatabricksDomain: ls_databricks_properties_typeProperties_domain
   armParamDatabricksWorkspaceId: ls_databricks_properties_typeProperties_workspaceResourceId
+
+  # The versions of the tools the pipeline installs - pinned, like the agent image, so that a
+  # deployment changes only when this repository changes. Moving one is a pull request like any other.
+  #   nodeVersion           an LTS line, as Microsoft's Data Factory build package asks
+  #                         (Node.js 20 left support in April 2026)
+  #   databricksCliVersion  a release tag of databricks/setup-cli: the install script of that tag
+  #                         installs exactly that CLI version (v1.21.0, released 14 Oct 2026)
+  #   bicepVersion          the Bicep release the failure alert's template was checked with
+  nodeVersion: '22.x'
+  databricksCliVersion: v1.21.0
+  bicepVersion: v0.48.1

@@ -28,7 +28,7 @@
 # MAGIC | `p_storage_account` | the environment's ADLS Gen2 storage account |
 # MAGIC | `p_storage_credential` | the name of the Unity Catalog storage credential through which Databricks reaches that account |
 # MAGIC
-# MAGIC What comes after it, in this order: `nb_silver_setup` (the silver tables), then `nb_uc_grants` (what the load's service principal may do).
+# MAGIC What comes after it, in this order: `nb_silver_setup` and `nb_gold_setup` (the silver and gold tables), then `nb_uc_grants` (what the load's service principal may do).
 
 # COMMAND ----------
 
@@ -85,7 +85,7 @@ for container, what in LOCATIONS:
 # COMMAND ----------
 
 # Cell 5 - BUILD: the catalog and its three schemas. The tables themselves are external: silver's are
-# defined by nb_silver_setup, bronze's are created by the load the first time it meets a table.
+# defined by nb_silver_setup, gold's by nb_gold_setup, bronze's are created by the load the first time it meets a table.
 spark.sql(f"""
     CREATE CATALOG IF NOT EXISTS {CATALOG}
     MANAGED LOCATION '{url("ucmanaged")}{CATALOG}'

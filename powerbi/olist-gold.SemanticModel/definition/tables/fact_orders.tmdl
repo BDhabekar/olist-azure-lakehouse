@@ -17,7 +17,7 @@ table fact_orders
 		formatString: 0.00
 		lineageTag: d1d2669f-2402-4db3-8d76-bbd2f1f58a22
 
-	measure 'Late Delivery %' = DIVIDE ( CALCULATE ( COUNTROWS ( fact_orders ), fact_orders[is_late] = TRUE () ), CALCULATE ( COUNTROWS ( fact_orders ), fact_orders[order_status] = "delivered", NOT ISBLANK ( fact_orders[delivered_customer_ts] ) ) )
+	measure 'Late Delivery %' = DIVIDE ( CALCULATE ( COUNTROWS ( fact_orders ), fact_orders[is_late] = TRUE (), fact_orders[order_status] = "delivered" ), CALCULATE ( COUNTROWS ( fact_orders ), fact_orders[order_status] = "delivered", NOT ISBLANK ( fact_orders[delivered_customer_ts] ) ) )
 		formatString: 0.00%;-0.00%;0.00%
 		lineageTag: a798e91a-eb1a-414d-a285-33172abdfe26
 
@@ -65,11 +65,6 @@ table fact_orders
 		summarizeBy: none
 		sourceColumn: purchase_ts
 
-		variation Variation
-			isDefault
-			relationship: 99885fa2-2b99-4ad8-8808-0315a694e3b8
-			defaultHierarchy: LocalDateTable_6d4ca4bd-eba4-4403-9087-10c0ab7d6f76.'Date Hierarchy'
-
 		annotation SummarizationSetBy = Automatic
 
 	column approved_ts
@@ -78,11 +73,6 @@ table fact_orders
 		lineageTag: 3b014f7c-34a1-4ee6-95f0-0ca4cbfaf05c
 		summarizeBy: none
 		sourceColumn: approved_ts
-
-		variation Variation
-			isDefault
-			relationship: 81776ebb-6645-4e77-bdf7-1009114028cf
-			defaultHierarchy: LocalDateTable_cfd8dc15-31c3-43d1-8c6b-14cf273c3568.'Date Hierarchy'
 
 		annotation SummarizationSetBy = Automatic
 
@@ -93,11 +83,6 @@ table fact_orders
 		summarizeBy: none
 		sourceColumn: delivered_carrier_ts
 
-		variation Variation
-			isDefault
-			relationship: 991b20d4-8677-43a3-92c4-9cfacab6e204
-			defaultHierarchy: LocalDateTable_109cbaa6-4dcf-4c47-8c7e-a230dfce9f54.'Date Hierarchy'
-
 		annotation SummarizationSetBy = Automatic
 
 	column delivered_customer_ts
@@ -107,11 +92,6 @@ table fact_orders
 		summarizeBy: none
 		sourceColumn: delivered_customer_ts
 
-		variation Variation
-			isDefault
-			relationship: b34e5465-764a-4527-afc7-850f524e204e
-			defaultHierarchy: LocalDateTable_d20c3fb1-9b64-4239-83ca-dffc6d7adcc1.'Date Hierarchy'
-
 		annotation SummarizationSetBy = Automatic
 
 	column estimated_delivery_ts
@@ -120,11 +100,6 @@ table fact_orders
 		lineageTag: d610e829-b506-4a8e-9733-eea8605d96b4
 		summarizeBy: none
 		sourceColumn: estimated_delivery_ts
-
-		variation Variation
-			isDefault
-			relationship: d301a50b-f00d-4a62-926f-5021818e3c8d
-			defaultHierarchy: LocalDateTable_0bb6d8a4-442b-4399-beae-3bb784a78ca6.'Date Hierarchy'
 
 		annotation SummarizationSetBy = Automatic
 
