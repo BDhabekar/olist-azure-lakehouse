@@ -4,7 +4,7 @@
 # Three notebook tasks on one job cluster. The cluster is created for the run and removed when
 # the run ends; the job owns no machine between runs.
 #
-# The job is started by the Data Factory pipeline pl_ingest_olist (activity job_bronze_silver),
+# The job is started by the Data Factory pipeline pl_ingest_olist (activity job_lakehouse_load),
 # which hands over two of the four parameters:
 #   p_run_id  - the pipeline's run id, so one id links the copy, the bronze load and the silver load
 #   p_tables  - the rows of the control table etl.ingest_config as JSON: the one list of tables
