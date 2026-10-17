@@ -210,9 +210,13 @@ RULES = [
 ]
 
 # Maintenance properties every table carries: the tables are external, so nothing compacts them unless we ask.
+# Time travel: Databricks refuses to read a version older than delta.deletedFileRetentionDuration (default 168 hours),
+# even when its files still exist (seen Oct 17: DELTA_UNSUPPORTED_TIME_TRAVEL_BEYOND_DELETED_FILE_RETENTION_DURATION).
+# 30 days gives silver a month in which any table can be read or restored as it was.
 PROPERTIES = {
-    "delta.autoOptimize.optimizeWrite": "true",
-    "delta.autoOptimize.autoCompact":   "true",
+    "delta.autoOptimize.optimizeWrite":   "true",
+    "delta.autoOptimize.autoCompact":     "true",
+    "delta.deletedFileRetentionDuration": "interval 30 days",
 }
 print(f"{len(TABLES)} table definitions, {len(RULES)} value rules")
 
@@ -220,11 +224,15 @@ print(f"{len(TABLES)} table definitions, {len(RULES)} value rules")
 
 # Cell 5 - BUILD (one-time conversion, Oct 17): source times stored as TIMESTAMP become TIMESTAMP_NTZ.
 # For each existing table where a column declared TIMESTAMP_NTZ in cell 4 is still TIMESTAMP:
-#   1. note the table's current version and row count;
+#   1. widen the time-travel window, then note the version that just wrote and its row count;
 #   2. REPLACE the table with its declared definition, same location (REPLACE keeps the history and the grants);
 #   3. copy the rows back from the previous version, each source time through CAST(... AS TIMESTAMP_NTZ);
 #   4. CHECK: same row count, and every old row, converted, has an identical new row (EXCEPT ALL = 0 rows);
 #   5. if the check fails: RESTORE the table to the noted version and stop.
+# Before step 2 the table's time-travel window is widened to 30 days (PROPERTIES): step 3 reads the previous version,
+# whose last write can be older than the default 7 days (Oct 17, dev: refused at step 3, orders left empty).
+# RESUME: a table whose last operation is a REPLACE and which holds no rows is a conversion stopped after step 2;
+# it is completed from the version before the REPLACE.
 # The CAST gives the local time in the session time zone (Microsoft Learn, cast function, read Oct 17). The silver
 # load has always run on job clusters in UTC, so in UTC the wall-clock value comes out exactly as the source wrote it.
 # The value rules and maintenance properties that REPLACE may drop are put back by cell 6.
@@ -246,21 +254,32 @@ for t, (columns, comment) in TABLES.items():
     ntz = declared_ntz(columns)
     if t not in types_now or not ntz:
         continue
+    full       = f"{CATALOG}.silver.{t}"
+    names      = [line.split()[0] for line in columns.strip().splitlines()]
     to_convert = [c for c in ntz if types_now[t].get(c) == "TIMESTAMP"]
-    if not to_convert:
+    last       = spark.sql(f"DESCRIBE HISTORY {full} LIMIT 1").first()
+    resume     = (not to_convert) and ("REPLACE" in last["operation"]) and spark.table(full).count() == 0
+    if not to_convert and not resume:
         continue
-    full    = f"{CATALOG}.silver.{t}"
-    version = spark.sql(f"DESCRIBE HISTORY {full} LIMIT 1").first()["version"]
-    before  = spark.table(full).count()
-    names   = [line.split()[0] for line in columns.strip().splitlines()]
-    select  = ", ".join(f"CAST({c} AS TIMESTAMP_NTZ) AS {c}" if c in to_convert else c for c in names)
 
-    spark.sql(f"""
-        CREATE OR REPLACE TABLE {full} ({columns}
-        )
-        COMMENT '{comment}'
-        LOCATION '{SILVER}/{t}'
-        TBLPROPERTIES ({property_list}, 'delta.feature.timestampNtz' = 'supported')""")
+    if resume:   # stopped after step 2 on an earlier run: complete it from the version before the REPLACE
+        version    = last["version"] - 1
+        to_convert = ntz                    # in the version before the REPLACE every one of them was still TIMESTAMP
+        spark.sql(f"ALTER TABLE {full} SET TBLPROPERTIES ({property_list})")     # the 30-day window, so that version is readable
+    else:
+        spark.sql(f"ALTER TABLE {full} SET TBLPROPERTIES ({property_list})")     # the 30-day window, before anything changes
+        version = spark.sql(f"DESCRIBE HISTORY {full} LIMIT 1").first()["version"]  # the version just written: seconds old,
+                                                                                   # so reading it back is never refused
+    select = ", ".join(f"CAST({c} AS TIMESTAMP_NTZ) AS {c}" if c in to_convert else c for c in names)
+    before = spark.sql(f"SELECT COUNT(*) AS n FROM {full} VERSION AS OF {version}").first()["n"]   # proves the old version is readable
+
+    if not resume:
+        spark.sql(f"""
+            CREATE OR REPLACE TABLE {full} ({columns}
+            )
+            COMMENT '{comment}'
+            LOCATION '{SILVER}/{t}'
+            TBLPROPERTIES ({property_list}, 'delta.feature.timestampNtz' = 'supported')""")
     spark.sql(f"INSERT INTO {full} ({', '.join(names)}) SELECT {select} FROM {full} VERSION AS OF {version}")
 
     after   = spark.table(full).count()
