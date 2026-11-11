@@ -1,0 +1,4 @@
+# What the tests need. Pinned, like every other tool of the pipeline: a test run changes only when this file does.
+# pyspark 4.1 is the Spark line of the job cluster's runtime family (spark_version 18.x in the job definition).
+pyspark==4.1.4
+pytest==9.2.0

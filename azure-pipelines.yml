@@ -16,6 +16,8 @@
 #                3. Databricks: validates the bundle (the job, its cluster, its notebooks).
 #                4. Monitoring: builds monitoring/alerts.bicep (the failure alert) - a syntax and
 #                   type check; nothing is deployed by the build.
+#                5. Tests: runs tests/ on the agent's own Spark - the real gold notebook on
+#                   made-up rows, and checks on the pipeline definitions. No workspace, no cluster.
 #
 #   deploy_dev   The package goes to dev.  } The same steps, from one template:
 #   deploy_prod  The same package goes to  } cicd/templates/deploy-environment.yml.
@@ -150,6 +152,28 @@ stages:
               az bicep version
               az bicep build --file "$(Build.Repository.LocalPath)/monitoring/alerts.bicep" --stdout > /dev/null
             displayName: az bicep build monitoring/alerts.bicep
+
+      - job: tests
+        displayName: Tests - the gold load and the definitions, on the agent's own Spark
+        steps:
+          # Runs the real notebook file nb_gold_load.py on made-up rows (tests/test_gold_load.py) and
+          # checks the Data Factory and notebook files themselves (tests/test_definitions.py). The
+          # Spark is the agent's own: no workspace, no cluster, no sign-in, no cost. A wrong join, or
+          # a write that comes before the checks, fails here on the pull request.
+          # Python and the packages are pinned (cicd/variables/common.yml, tests/requirements.txt).
+          - task: UsePythonVersion@0
+            displayName: Use Python $(pythonVersion)
+            inputs:
+              versionSpec: $(pythonVersion)
+
+          # Spark 4 needs Java 17 or newer. The Microsoft-hosted image carries several and names
+          # version 17 in JAVA_HOME_17_X64; if that name is ever missing, the image's default is used.
+          - script: |
+              set -e
+              export JAVA_HOME="${JAVA_HOME_17_X64:-$JAVA_HOME}"
+              python -m pip install --disable-pip-version-check -r "$(Build.Repository.LocalPath)/tests/requirements.txt"
+              python -m pytest "$(Build.Repository.LocalPath)/tests" -q
+            displayName: pytest tests/
 
   # ===================================================================================
   # The same package, first to dev, then - after approval - to prod.
