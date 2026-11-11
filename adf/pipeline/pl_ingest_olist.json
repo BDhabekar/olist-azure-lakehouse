@@ -162,6 +162,7 @@
 				}
 			}
 		],
+		"concurrency": 1,
 		"variables": {
 			"v_load_date": {
 				"type": "String"

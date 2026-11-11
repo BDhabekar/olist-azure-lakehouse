@@ -8,8 +8,8 @@
 				"dependsOn": [],
 				"policy": {
 					"timeout": "0.12:00:00",
-					"retry": 0,
-					"retryIntervalInSeconds": 30,
+					"retry": 2,
+					"retryIntervalInSeconds": 60,
 					"secureOutput": false,
 					"secureInput": false
 				},
@@ -18,7 +18,7 @@
 					"source": {
 						"type": "SqlServerSource",
 						"sqlReaderQuery": {
-							"value": "@if(equals(pipeline().parameters.p_load_type, 'incremental'),\n    concat('SELECT MAX(', pipeline().parameters.p_watermark_column, ') AS new_watermark FROM ', pipeline().parameters.p_source_schema, '.', pipeline().parameters.p_table_name),\n    'SELECT CAST(SYSUTCDATETIME() AS DATETIME2(3)) AS new_watermark')",
+							"value": "@if(equals(pipeline().parameters.p_load_type, 'incremental'),\n    concat('SELECT COALESCE(MAX(', pipeline().parameters.p_watermark_column, '), CAST(''', pipeline().parameters.p_last_watermark, ''' AS DATETIME2(3))) AS new_watermark FROM ', pipeline().parameters.p_source_schema, '.', pipeline().parameters.p_table_name, ' WHERE ', pipeline().parameters.p_watermark_column, ' <= DATEADD(SECOND, -', string(pipeline().parameters.p_lag_seconds), ', SYSUTCDATETIME())'),\n    'SELECT CAST(SYSUTCDATETIME() AS DATETIME2(3)) AS new_watermark')",
 							"type": "Expression"
 						},
 						"queryTimeout": "02:00:00",
@@ -43,8 +43,8 @@
 				],
 				"policy": {
 					"timeout": "0.12:00:00",
-					"retry": 0,
-					"retryIntervalInSeconds": 30,
+					"retry": 2,
+					"retryIntervalInSeconds": 60,
 					"secureOutput": false,
 					"secureInput": false
 				},
@@ -118,8 +118,8 @@
 				],
 				"policy": {
 					"timeout": "0.12:00:00",
-					"retry": 0,
-					"retryIntervalInSeconds": 30,
+					"retry": 2,
+					"retryIntervalInSeconds": 60,
 					"secureOutput": false,
 					"secureInput": false
 				},
@@ -346,6 +346,10 @@
 			},
 			"p_last_watermark": {
 				"type": "string"
+			},
+			"p_lag_seconds": {
+				"type": "int",
+				"defaultValue": 120
 			}
 		},
 		"annotations": [],
