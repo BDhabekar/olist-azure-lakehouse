@@ -22,12 +22,13 @@ What changed in each version, and what each change has been run on.
 
 | Change | Proven by |
 |---|---|
-| Gold checked before written | The tests, on a local Spark 4.1 session with Parquet tables. Not yet run on Databricks |
-| Failed-table handling in bronze and silver | Not yet run. The files compile and a test guards the loop's shape |
-| Watermark lag, retries, one run at a time | Not yet run. The JSON is valid and tests guard the settings; the lag query was read as text, not executed on SQL Server |
-| The tests in the build | Run locally. Not yet run on an Azure DevOps agent |
+| Gold checked before written | The tests, on a local Spark 4.1 session with Parquet tables, including the case where a failed check writes nothing. On Databricks: one load in dev on Nov 12, 2026, where the pipeline and its job succeeded. A failing check has not been seen on Databricks |
+| Failed-table handling in bronze and silver | Ran in the same dev load, where no table failed. The case it exists for, one table failing while the others load, has not been seen |
+| Watermark lag | The new lookup query ran on the source SQL Server for all eight tables in the dev load. A transaction committing late has not been staged |
+| Retries, one run at a time | Deployed to dev and in place for that load. No retry fired and no second run was queued, so neither has been seen working |
+| The tests in the build | Green on a Microsoft-hosted Azure DevOps agent, run #20261112.2 |
 
-The first load in dev after this version is deployed proves the three "not yet run" lines; this table is then updated by pull request.
+The dev load of Nov 12, 2026 took 25 minutes from trigger to end, against about 15 for the first load of version 1.0.
 
 ## 1.0.0 (October 17, 2026)
 
