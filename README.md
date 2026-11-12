@@ -1,91 +1,83 @@
-# Olist E-commerce Lakehouse on Azure
+# Olist e-commerce lakehouse on Azure
 
-An incremental data platform on Azure, built end to end. Orders from an on-premises SQL Server are copied by Azure Data Factory into ADLS Gen2, loaded by an Azure Databricks job through bronze, silver and gold Delta tables in Unity Catalog, and reported in Power BI. Every change reaches production through a pull request and an Azure DevOps pipeline that deploys to two separate environments, dev and prod.
+This is an incremental data platform I built on Azure in October 2026. SQL Server 2025 on my laptop plays the on-premises source. Azure Data Factory copies new and changed rows into ADLS Gen2, an Azure Databricks job loads them through bronze, silver and gold Delta tables in Unity Catalog, and a Power BI report reads gold. There are two environments, dev and prod, and a change reaches them only through a pull request and an Azure DevOps pipeline.
 
-All transformations are SQL on Databricks. Python only reads the parameters and runs the same SQL for each table in the list.
-
-| Area | What |
-|---|---|
-| Source | SQL Server 2025 on a laptop, standing in for the on-premises network. The Brazilian E-Commerce Public Dataset by Olist: 9 tables, 1.55 M rows of history, replayed month by month as live business |
-| Ingestion | Azure Data Factory with a self-hosted integration runtime. Watermark-based incremental copy driven by a control table, with a run log and a watermark per table |
-| Lakehouse | Azure Databricks, Delta Lake, Unity Catalog external tables, medallion layers (bronze / silver / gold) |
-| Serving | A gold star schema (4 dimensions, 2 facts, 3 KPI tables) and a Power BI report (Import mode) |
-| Delivery | GitHub → Azure DevOps YAML pipeline → dev, then prod after approval. ARM templates for Data Factory, a Databricks Asset Bundle for the job, Bicep for monitoring |
-| Proven | First load: 343,844 rows in 8 tables, equal to the source, in dev and in prod. 13 gold-to-silver reconciliation checks fail the run if any one breaks. A deliberately failed run sent the alert mail 2 min 45 s after it failed |
+The data is the Brazilian E-Commerce Public Dataset by Olist: 9 tables, 1.55 million rows. The source starts with the history up to the end of 2017, and I replay later months one at a time so the pipeline always has new business to pick up. Every transformation is SQL on Databricks. Python only reads the parameters and runs the same SQL for each table.
 
 ![Architecture. Data flows from SQL Server on the laptop through a self-hosted integration runtime into ADLS Gen2 (bronze, silver, gold) and on to Power BI. Data Factory orchestrates each run with an Azure SQL control database and Key Vault; a Databricks job loads the layers; Azure Monitor alerts on failed runs; Azure DevOps deploys dev, then prod after approval.](docs/images/architecture.png)
 
-## How one run works
+## One run, start to finish
 
-1. **Copy what changed.** Data Factory reads the list of tables from a control database. For each table it copies only the rows changed since the last watermark into the lake as Parquet, through a self-hosted runtime on the source machine. The watermark moves only after the copy succeeds.
-2. **Bronze.** `COPY INTO` loads each landed file exactly once and stamps every row with the file it came from and the time it was loaded.
-3. **Silver.** Rows that break a rule go to a quarantine table with the rule's name. The rest are reduced to the newest row per business key and merged. A key held twice fails the table.
-4. **Gold.** The star schema is worked out from silver, reconciled with 13 checks, and written only when all 13 pass.
-5. **When something fails,** the pipeline fails, the error text is in a run log, and an alert mail goes out. Gold keeps its last good load.
+1. Data Factory reads the list of tables from a control database. For each table it asks the source for the rows changed since the last watermark and writes them to the lake as Parquet. The copy runs on a self-hosted runtime on the source machine, so nothing in Azure ever connects in to the database. The watermark moves only after the copy has succeeded.
+2. The bronze task loads each landed file once with `COPY INTO` and stamps every row with the file it came from and the time it was loaded.
+3. The silver task sends rows that break a rule to a quarantine table, keeps the newest row per business key and merges the result. If a key ends up in a table twice, that table fails.
+4. The gold task builds the star schema from silver, runs 13 reconciliation checks on it, and writes the tables only if all 13 pass.
 
-A second run over the same data changes nothing in any layer. The full walk-through, the layers, the business keys and the Power BI model are in [docs/how-it-works.md](docs/how-it-works.md).
+If a step fails, the pipeline fails and an alert mail is sent. The error text is kept: in a run log for the copy, and in audit tables for the bronze and silver loads. Running again is safe: silver and gold come out the same. Bronze is the exception, because it takes a fresh copy of the three reference tables on every run (one of the known gaps below).
 
-## What was proven
+The details are in [docs/how-it-works.md](docs/how-it-works.md).
 
-- **First load, dev and prod:** 343,844 rows in 8 tables, every count equal to the source, 0 duplicate keys, 0 quarantined.
-- **Incremental:** replaying one month added 6,728 new orders. Changing one order at the source updated exactly that row in silver. A re-run changed nothing.
-- **Gold:** 13 of 13 reconciliation checks passed in dev and in prod, with every number equal between the two.
-- **Alerting:** a deliberately failed run sent the alert mail 2 min 45 s after it failed.
-- **A finding the checks surfaced:** payments exceed order value by 122,510.10 BRL, nearly all of it 622 paid orders that have no item lines in the source. So the report's revenue is order value, not payments.
-- **Cost:** the first full load cost at most about ₹30 (well under US$1) on the meter.
+## What I measured
 
-These numbers are from the first release (October 2026). What has changed since, and what each change has been run on, is in [CHANGELOG.md](CHANGELOG.md). The evidence pictures and the cost detail are in [docs/numbers-and-cost.md](docs/numbers-and-cost.md).
+- First load, in dev and again in prod: 343,844 rows in 8 tables. Every count matched the source, with 0 duplicate keys and 0 rows in quarantine.
+- All 13 gold checks passed in both environments, and every number was the same in dev and in prod.
+- A run I failed on purpose sent the alert mail 2 minutes 45 seconds after it failed.
+- The first full load cost at most about ₹30 (well under US$1) on the meter.
+
+The incremental behaviour was proven earlier, in the single environment I built before dev and prod existed. Replaying February 2018 added 6,728 orders on top of the rows already in silver. Changing one order at the source changed exactly that row in silver, and a second run changed nothing.
+
+The checks also turned up something in the data. Payments come to 122,510.10 BRL more than order value. Measured on an earlier copy of the same data, nearly all of that gap is 622 orders that were paid but have no item lines in the source. That is why the report counts revenue as order value and leaves payments out of it.
+
+These numbers are from version 1.0. [CHANGELOG.md](CHANGELOG.md) lists what version 1.1 changed and how far each change has been run. The evidence pictures and the cost detail are in [docs/numbers-and-cost.md](docs/numbers-and-cost.md).
 
 ![Sales overview](docs/images/powerbi-sales-overview.png)
 
-## The decisions that matter most
+## Design choices
 
-| Decision | Choice | Why not the alternative |
+| Question | What I chose | What I turned down |
 |---|---|---|
-| Reaching the on-premises database | A self-hosted runtime that only makes outbound connections on port 443 | An inbound port on the database is the first thing a security review refuses |
-| Finding new rows | A watermark on `modified_at`, read before the copy and saved after it, and held two minutes behind the clock | A full reload every run grows with the table. A watermark with no lag skips a transaction that commits late |
-| Writing silver | `MERGE` on a key found by a grain census, updating only when the incoming row is newer | Append doubles rows on a re-run. Overwrite loses history and gets slower every day |
-| Bad rows | Quarantine with the broken rule's name; good rows still load | Dropping them hides the problem. Failing the load for one row stops the business for a typo |
-| Publishing gold | Checked first, written second | Writing first means the alert arrives with the wrong numbers already in the report |
-| Compute | A job cluster that exists only for the run | Serverless notebooks, measured here at about ₹3,000 in three days |
-| Deployment | An ARM template generated by the build, signed in by workload identity federation | The Publish button, and a secret stored in the pipeline |
+| How does Azure reach a database inside a private network? | A self-hosted runtime on the source machine that only makes outbound connections on port 443 | Opening an inbound port or a public endpoint on the database |
+| How are new rows found? | A watermark on `modified_at`, read before the copy, saved after it, and kept two minutes behind the clock | A full reload every run. A watermark with no lag, which can skip a row whose transaction commits late |
+| How is silver written? | A `MERGE` on the business key that updates a row only when the incoming one is newer | Append, which doubles rows on a re-run. Overwrite, which is slow and loses history |
+| What happens to a bad row? | It goes to a quarantine table with the name of the rule it broke, and the good rows still load | Dropping it silently. Failing the whole load for one row |
+| When is gold written? | After the 13 checks have passed | Writing first and checking afterwards, which puts wrong numbers in the report before the alert arrives |
+| What compute does it use? | A job cluster that exists only for the run, and a small auto-stop cluster for development | Serverless notebooks, which I measured as far more expensive for this workload |
+| How is it deployed? | An ARM template generated by the build, with Azure DevOps signing in through workload identity federation | The Publish button in Data Factory. A secret stored in the pipeline |
 
-All 22 decisions, with what was rejected, are in [docs/design-decisions.md](docs/design-decisions.md).
+All 22 decisions are in [docs/design-decisions.md](docs/design-decisions.md).
 
-## Delivery
+## Getting a change to prod
 
-A pull request runs the build: Data Factory validation, the Databricks bundle, the alert's Bicep, and the tests in `tests/`, which run the real gold notebook on made-up rows. A merge to `main` deploys to dev and then, after an approval, to prod. Dev and prod each have their own resource group, factory, storage, Key Vault, control database, Databricks workspace, catalog and identities, and no identity of one environment holds anything in the other.
+A pull request runs the build. It validates the Data Factory files, the Databricks bundle and the alert template, and it runs the tests in `tests/`, which execute the real gold notebook on a handful of made-up orders. After the merge the pipeline deploys to dev, waits for my approval, and then deploys the same package to prod.
 
 ![A merge to main: build, then dev, then prod after approval](docs/images/cicd-run-stages.png)
 
-There are no keys, SAS tokens or personal access tokens anywhere. The one secret is the source database's password, and it lives in Key Vault.
+Dev and prod have separate resource groups, factories, storage accounts, Key Vaults, control databases, Databricks workspaces, catalogs and identities. They share three things: the runtime on the laptop, the Unity Catalog metastore and the subscription. The project holds no keys, SAS tokens or personal access tokens. Its one secret is the source database password, which is kept in Key Vault.
 
-More: [docs/environments-and-cicd.md](docs/environments-and-cicd.md) and [docs/security-and-access.md](docs/security-and-access.md).
+More in [docs/environments-and-cicd.md](docs/environments-and-cicd.md) and [docs/security-and-access.md](docs/security-and-access.md).
 
-## Known gaps
+## What it doesn't do yet
 
-These are deliberate and named. The design for each is in [docs/known-gaps.md](docs/known-gaps.md), with what would change at 100 times the data.
+I left these out knowingly. [docs/known-gaps.md](docs/known-gaps.md) has the design for each one and what I would change at 100 times the data.
 
-- **Deletes at the source are not seen.** A timestamp watermark cannot see a deleted row. The fix is change tracking and a delete branch in the silver `MERGE`.
-- **Nothing is ever removed.** Reference tables are re-copied whole each run, so bronze holds one copy of `products` per run.
-- **The lab's network is open.** Storage accepts all networks and the workspaces have no private endpoints.
-- **The source is one laptop.** One runtime node, a self-signed certificate.
-- **The daily schedule is deployed but stopped,** to save cost. Every load so far was started by hand.
-- **One reviewer.** I approve my own pull requests.
+- It can't see a delete at the source. A timestamp watermark only finds rows that still exist.
+- It never removes anything. Bronze keeps every copy of the reference tables it has ever received.
+- The network is open. Storage accepts all networks and the workspaces have no private endpoints, because a student subscription has no private network to put them in.
+- The source is a single laptop with a self-signed certificate.
+- The daily schedule is deployed but switched off to save cost, so I have started every load by hand.
+- I approve my own pull requests.
 
-## Where to read more
+## More detail
 
-| If you want | Open |
-|---|---|
-| The run step by step, the layers, the keys, the report model | [docs/how-it-works.md](docs/how-it-works.md) |
-| Every design decision and what was rejected | [docs/design-decisions.md](docs/design-decisions.md) |
-| The numbers, the evidence pictures, the cost | [docs/numbers-and-cost.md](docs/numbers-and-cost.md) |
-| Environments, the pipeline, monitoring | [docs/environments-and-cicd.md](docs/environments-and-cicd.md) |
-| Who may do what, and why | [docs/security-and-access.md](docs/security-and-access.md) |
-| What to do when a run fails, how to re-run, how to release quarantined rows | [docs/runbook.md](docs/runbook.md) |
-| The known gaps and the 100× design | [docs/known-gaps.md](docs/known-gaps.md) |
-| Building it yourself | [docs/reproduce.md](docs/reproduce.md) |
-| What changed in each version | [CHANGELOG.md](CHANGELOG.md) |
+- [How it works](docs/how-it-works.md): one run in detail, the layers, the business keys, the report model
+- [Design decisions](docs/design-decisions.md): all 22, each with what was turned down
+- [Numbers and cost](docs/numbers-and-cost.md)
+- [Environments, CI/CD and monitoring](docs/environments-and-cicd.md)
+- [Security and access](docs/security-and-access.md): who may do what
+- [Runbook](docs/runbook.md): starting a load, reading a failure, releasing quarantined rows, rolling back
+- [Known gaps](docs/known-gaps.md)
+- [Reproducing it](docs/reproduce.md)
+- [Changelog](CHANGELOG.md)
 
 ## Repository layout
 
@@ -104,17 +96,17 @@ monitoring/alerts.bicep the failure alert
 powerbi/                the report as a Power BI Project (.pbip)
 tests/                  the gold notebook run on made-up rows; checks on the definitions
 docs/                   the pages listed above, and the pictures
-azure-pipelines.yml     build → dev → prod
+azure-pipelines.yml     build, then dev, then prod
 ```
 
-## How it was built
+## How I built it
 
-Built in October 2026, in two steps. First a single environment — ingestion, bronze, silver and the job — each piece proven with real runs. Then dev and prod were created new, side by side, and filled only by the pipeline; every change since has gone through a [pull request](https://github.com/BDhabekar/olist-azure-lakehouse/pulls?q=is%3Apr+is%3Aclosed). The repository's first commits still show the Data Factory of that first environment, practice objects included; they were removed in `f61fed7`.
+I built it in two steps. The first was a single environment with ingestion, bronze, silver and the job, each piece proven with real runs. Then I created dev and prod from scratch, side by side, and filled them only through the pipeline. Every change since has gone through a [pull request](https://github.com/BDhabekar/olist-azure-lakehouse/pulls?q=is%3Apr+is%3Aclosed). The repository's first commits still show the Data Factory of that first environment, practice objects included. I removed them in `f61fed7`.
 
-I built this with an AI assistant (Claude) as mentor and pair-programmer. The design decisions, the Azure build, and every run and check are mine; much of the code — notebooks, SQL scripts, pipeline YAML — was drafted with the assistant and reviewed and run by me.
+I worked with an AI assistant (Claude) as mentor and pair-programmer. The design decisions, the Azure build, and every run and check are mine. Much of the code (notebooks, SQL scripts, pipeline YAML) was drafted with the assistant, then reviewed and run by me.
 
 ## Data and licence
 
 Brazilian E-Commerce Public Dataset by Olist ([Kaggle](https://www.kaggle.com/datasets/olistbr/brazilian-ecommerce)), licensed CC BY-NC-SA 4.0. No data is stored in this repository.
 
-The code is under the MIT licence — see [LICENSE](LICENSE). The icons in the architecture picture are [Tabler Icons](https://github.com/tabler/tabler-icons) (MIT licence).
+The code is under the MIT licence; see [LICENSE](LICENSE). The icons in the architecture picture are [Tabler Icons](https://github.com/tabler/tabler-icons) (MIT licence).
