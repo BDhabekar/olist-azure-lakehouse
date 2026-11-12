@@ -14,6 +14,8 @@
 # MAGIC
 # MAGIC Run twice over the same data it changes nothing the second time.
 # MAGIC
+# MAGIC A table that fails does not stop the others: its bookmark stays where it was, every other table still loads, and the notebook fails at its end (cell 7), so the gold load does not start on a silver that is not whole.
+# MAGIC
 # MAGIC **Parameters** (the job passes them; by hand, type them into the boxes at the top):
 # MAGIC
 # MAGIC | Parameter | Meaning |
@@ -104,6 +106,7 @@ def audit(t, status, old_mark, new_mark, started, n_read=None, n_q=None, n_ins=N
 # COMMAND ----------
 
 # Cell 5 - BUILD: the silver load, the same statements for every table in the list.
+failed = []   # tables whose load raised an error; the run fails in cell 7, after every table has had its turn
 for t, (key, newest, guard) in cfg.items():
     bronze  = f"{CATALOG}.bronze.{t}"
     silver  = f"{CATALOG}.silver.{t}"
@@ -199,7 +202,7 @@ for t, (key, newest, guard) in cfg.items():
                       WHERE table_name = '{t}' AND last_loaded_at < TIMESTAMP'{new_mark}'""")
     except Exception as e:
         audit(t, "failed", old_mark, new_mark, started, error=str(e))
-        raise
+        failed.append(t)
 
 # COMMAND ----------
 
@@ -208,3 +211,11 @@ display(spark.sql(f"""
     SELECT table_name, status, bronze_rows_read, rows_quarantined, rows_inserted, rows_updated, rows_in_silver, duplicate_keys
     FROM {CATALOG}.silver.load_audit WHERE run_id = '{RUN_ID}' ORDER BY finished_at"""))
 display(spark.sql(f"SELECT table_name, reason, _source_file FROM {CATALOG}.silver.quarantine"))
+
+# COMMAND ----------
+
+# Cell 7 - a table that failed fails the run. Its bookmark was not moved, so the next run reads the same window again.
+# The job's next task, gold_load, then does not start: gold is never rebuilt from a silver load that is not whole.
+if failed:
+    raise RuntimeError(f"Silver load failed for {len(failed)} of {len(cfg)} tables: {', '.join(failed)}. "
+                       "The other tables were loaded. See error_message in silver.load_audit for this run_id.")

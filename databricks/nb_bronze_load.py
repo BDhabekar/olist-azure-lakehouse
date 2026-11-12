@@ -2,7 +2,7 @@
 # MAGIC %md
 # MAGIC # nb_bronze_load — the files Data Factory landed become bronze Delta tables
 # MAGIC
-# MAGIC **What this notebook does.** For every table in the list it is given: `COPY INTO` the bronze Delta table from the folder where Data Factory wrote that table's Parquet files. `COPY INTO` remembers which files it has loaded, so a second run loads nothing. Each row keeps where it came from (`_source_file`, `_source_file_time`) and when it was loaded (`_loaded_at`). One audit row per table per run is written to `bronze.load_audit`.
+# MAGIC **What this notebook does.** For every table in the list it is given: `COPY INTO` the bronze Delta table from the folder where Data Factory wrote that table's Parquet files. `COPY INTO` remembers which files it has loaded, so a second run loads nothing. Each row keeps where it came from (`_source_file`, `_source_file_time`) and when it was loaded (`_loaded_at`). One audit row per table per run is written to `bronze.load_audit`. A table that fails does not stop the others: every table has its turn, and the notebook fails at its end if any of them failed.
 # MAGIC
 # MAGIC **Bronze is "as received".** The tables take their columns from the files; nothing is declared, renamed or filtered here. That is silver's job.
 # MAGIC
@@ -87,6 +87,7 @@ def audit(table, status, started, rows_loaded=None, rows_in_table=None, error=No
 # COMMAND ----------
 
 # Cell 5 - BUILD: the bronze load, the same statements for every table in the list.
+failed = []   # tables whose load raised an error; the run fails in cell 6, after every table has had its turn
 for t in tables:
     full    = f"{CATALOG}.bronze.{t}"
     started = spark.sql("SELECT CAST(current_timestamp() AS STRING) AS s").first()["s"]
@@ -114,10 +115,18 @@ for t in tables:
         audit(t, "succeeded", started, loaded, spark.table(full).count())
     except Exception as e:
         audit(t, "failed", started, error=str(e))
-        raise
+        failed.append(t)
 
 display(spark.sql(f"""
     SELECT table_name, status, rows_loaded, rows_in_table, error_message
     FROM {CATALOG}.bronze.load_audit
     WHERE run_id = '{RUN_ID}'
     ORDER BY finished_at"""))
+
+# COMMAND ----------
+
+# Cell 6 - a table that failed fails the run. The error text of each is in bronze.load_audit (shown above).
+# The job's next task, silver_load, then does not start: silver is never built on a bronze load that is not whole.
+if failed:
+    raise RuntimeError(f"Bronze load failed for {len(failed)} of {len(tables)} tables: {', '.join(failed)}. "
+                       "The other tables were loaded. See error_message in bronze.load_audit for this run_id.")

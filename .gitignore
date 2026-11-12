@@ -8,6 +8,8 @@ cicd/adf-build/ArmTemplate/
 # Python and editor noise
 __pycache__/
 *.pyc
+.pytest_cache/
+spark-warehouse/
 .ipynb_checkpoints/
 .vs/
 .vscode/

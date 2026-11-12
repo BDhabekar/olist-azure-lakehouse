@@ -32,6 +32,8 @@ variables:
   #   databricksCliVersion  a release tag of databricks/setup-cli: the install script of that tag
   #                         installs exactly that CLI version (v1.21.0, released 14 Oct 2026)
   #   bicepVersion          the Bicep release the failure alert's template was checked with
+  #   pythonVersion         the Python the tests run on (tests/requirements.txt pins the packages)
   nodeVersion: '22.x'
   databricksCliVersion: v1.21.0
   bicepVersion: v0.48.1
+  pythonVersion: '3.12'
